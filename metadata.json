@@ -1,0 +1,7 @@
+{
+  "name": "Aipia - AI Travel Planner",
+  "description": "AI-powered travel concierge that creates unique travel plans for hidden gems in Japan, integrating search and map data for a seamless experience.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
