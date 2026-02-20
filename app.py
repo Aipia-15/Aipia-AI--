@@ -95,4 +95,16 @@ elif st.session_state.step == "final_plan":
                 選択スポット：{', '.join(st.session_state.selected_spots)}
                 """
                 res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
-                st.session_state.final_plans[label] = res.choices
+                st.session_state.final_plans[label] = res.choices[0].message.content
+                progress_bar.progress((i + 1) / 5)
+                time.sleep(2) # ★ここで2秒休んでRateLimitを回避！
+            except Exception:
+                st.error("混雑しています。少し待って再読み込みしてください。")
+                break
+
+    tabs = st.tabs(list(st.session_state.final_plans.keys()))
+    for label, tab in zip(st.session_state.final_plans.keys(), tabs):
+        with tab:
+            st.markdown(st.session_state.final_plans[label], unsafe_allow_html=True)
+
+st.markdown('<div class="footer">2025-2026 / AIPIA</div>', unsafe_allow_html=True)
