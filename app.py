@@ -40,8 +40,8 @@ st.markdown("""
         margin-top: 25px;
         padding: 25px 0;
         display: inline-block;
-        border-top: 15px solid #111; /* 黒い棒をより太く、文字との距離を確保 */
-        border-bottom: 15px solid #111;
+        border-top: 10px solid #111; /* 黒い棒をより太く、文字との距離を確保 */
+        border-bottom: 10px solid #111;
         line-height: 1.1;
         position: relative;
         z-index: 5;
