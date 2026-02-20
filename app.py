@@ -1,3 +1,5 @@
+st.title("Aipia") # 例：「爆速旅行プランナー」など
+
 import streamlit as st
 from groq import Groq
 
