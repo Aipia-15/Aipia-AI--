@@ -8,7 +8,7 @@ st.set_page_config(layout="wide", page_title="Aipia - AI Travel Planner")
 # 2. クライアント設定
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. デザイン (CSS) - カードとステータス用
+# 3. デザイン (CSS)
 st.markdown("""
     <style>
     .stApp { background-color: #FCF9F2; }
@@ -19,21 +19,23 @@ st.markdown("""
     /* スポットカードのデザイン */
     .spot-card {
         background-color: white;
-        padding: 20px;
+        padding: 25px;
         border-radius: 20px;
         border: 1px solid #eee;
         box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        margin-bottom: 25px;
+        margin-bottom: 30px;
+        position: relative;
     }
     .status-box {
         background-color: #f8fafc;
-        padding: 10px;
-        border-radius: 10px;
+        padding: 12px;
+        border-radius: 12px;
         font-size: 14px;
         color: #475569;
-        margin-top: 10px;
+        margin-top: 15px;
         display: flex;
         justify-content: space-around;
+        border: 1px solid #e2e8f0;
     }
     .plan-card { background-color: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); white-space: pre-wrap; }
     </style>
@@ -65,14 +67,19 @@ if st.session_state.step == "input":
         with st.spinner("AIが10件のスポット詳細を生成中..."):
             st.session_state.form_data = {"adults": adults, "kids": kids, "budget": budget_input}
             target = destination if destination else keyword
-            # AIに構造化されたデータを要求
-            prompt = f"""{target}周辺でテーマ『{tags}』に合うスポット10件を以下の形式で出力してください。
-            名称 / 説明(150文字) / 推定予算 / おすすめ度(星5) / 混雑度(3段階) / 公式URL
-            ※各スポットの間は '---' で区切ってください。"""
+            prompt = f"""{target}周辺でテーマ『{tags}』に合うスポット10件を以下の形式のみで出力してください。
+            名称: (スポット名)
+            解説: (150文字以内)
+            予算: (金額)
+            おすすめ度: (星5つ)
+            混雑度: (低・中・高)
+            URL: (公式サイトURL)
+            ---"""
             
             res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
             raw_text = res.choices[0].message.content
-            st.session_state.parsed_spots = raw_text.split("---")[:10]
+            # --- で区切ってリスト化
+            st.session_state.parsed_spots = [s.strip() for s in raw_text.split("---") if "名称:" in s][:10]
             st.session_state.step = "select_spots"
             st.rerun()
 
@@ -82,41 +89,45 @@ elif st.session_state.step == "select_spots":
     
     selected_names = []
     for i, spot_data in enumerate(st.session_state.parsed_spots):
-        # 簡易的なデータ分割（AIの出力を想定）
-        lines = spot_data.strip().split("\n")
-        if len(lines) < 2: continue
+        # データのパース（簡易的）
+        details = {}
+        for line in spot_data.split("\n"):
+            if ":" in line:
+                k, v = line.split(":", 1)
+                details[k.strip()] = v.strip()
         
-        name = lines[0].replace("#", "").strip()
+        name = details.get("名称", f"スポット {i+1}")
         
-        with st.container():
-            st.markdown(f'<div class="spot-card">', unsafe_allow_html=True)
-            
-            # 右上にお気に入りボタンを配置するためのカラム
-            col_main, col_fav = st.columns([9, 1])
-            with col_fav:
-                is_favorite = st.checkbox("⭐", key=f"fav_{i}", help="お気に入り登録")
-                if is_favorite: selected_names.append(name)
-            
-            with col_main:
-                col_img, col_txt = st.columns([1, 2])
-                with col_img:
-                    st.image(f"https://picsum.photos/seed/travel_{i}/500/350", use_container_width=True)
-                with col_txt:
-                    st.bold(name)
-                    st.write(spot_data) # AIの回答内容を表示
-                    st.markdown(f"""
-                        <div class="status-box">
-                            <span>💰 予算目安: 5,000円〜</span>
-                            <span>⭐ おすすめ度: ★★★★☆</span>
-                            <span>👥 混雑度: 普通</span>
-                        </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div class="spot-card">', unsafe_allow_html=True)
+        
+        # カラム分け: メイン 9, お気に入り 1
+        col_main, col_fav = st.columns([9, 1])
+        with col_fav:
+            is_favorite = st.checkbox("⭐", key=f"fav_{i}")
+            if is_favorite: selected_names.append(name)
+        
+        with col_main:
+            col_img, col_txt = st.columns([1, 2])
+            with col_img:
+                st.image(f"https://picsum.photos/seed/aipia_{i}/600/400", use_container_width=True)
+            with col_txt:
+                st.markdown(f"### {name}")
+                st.write(details.get("解説", "解説が取得できませんでした。"))
+                st.markdown(f"""
+                    <div class="status-box">
+                        <span>💰 予算: {details.get('予算', '不明')}</span>
+                        <span>✨ おすすめ: {details.get('おすすめ度', '不明')}</span>
+                        <span>👥 混雑: {details.get('混雑度', '不明')}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+                if "URL" in details:
+                    st.caption(f"🔗 [公式サイト]({details['URL']})")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
     hotel_type = st.selectbox("🏨 宿泊の希望", ["露天風呂付き客室", "モダンなホテル", "キャンプ", "古民家"])
     
-    if st.button("🚀 選択したスポットでプランを作る", use_container_width=True, type="primary"):
+    if st.button("🚀 選択したスポットで5種類のプランを作る", use_container_width=True, type="primary"):
         if not selected_names:
             st.warning("スポットを1つ以上選んでください！")
         else:
@@ -130,7 +141,7 @@ elif st.session_state.step == "final_plan":
     st.subheader("🗓 あなただけの特別プラン（5種類）")
     f = st.session_state.form_data
     with st.spinner("詳細な行程表を作成中..."):
-        prompt = f"大人{f['adults']}名、子供{f['kids']}名、予算{f['budget']}。スポット「{st.session_state.selected_names}」と宿泊「{st.session_state.hotel_type}」を軸に、乗り換え時間を含めた5種類のプランを作ってください。食事処には[右上におすすめ！]と明記し、最後に関連URLをまとめてください。"
+        prompt = f"大人{f['adults']}名、子供{f['kids']}名、予算{f['budget']}。スポット「{st.session_state.selected_names}」と宿泊「{st.session_state.hotel_type}」を軸に、乗り換え時間を含めた5種類のプランを詳しく作って。食事処には[右上におすすめ！]と書き、各所に予約URLを添えて。"
         res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
         st.markdown(f'<div class="plan-card">{res.choices[0].message.content}</div>', unsafe_allow_html=True)
 
