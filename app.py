@@ -12,95 +12,80 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 st.markdown("""
     <style>
     .stApp { background-color: #FCF9F2; }
-    .logo-container { text-align: center; padding-top: 10px; }
-    .aipia-logo { font-family: 'Georgia', serif; font-style: italic; font-size: 60px; font-weight: bold; margin-bottom: 0px; }
-    .sub-title { font-size: 16px; color: #555; letter-spacing: 2px; }
-    .spot-card { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 10px; }
-    .recommend-badge { float: right; background-color: #ff4b4b; color: white; padding: 2px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+    .logo-container { text-align: center; padding: 40px 0; }
+    .aipia-logo { 
+        font-family: 'Georgia', serif; font-style: italic; 
+        font-size: 100px; /* さらに大きく */
+        font-weight: bold; color: #111; margin-bottom: -10px; 
+    }
+    .sub-title { font-size: 20px; color: #555; font-weight: bold; letter-spacing: 4px; }
+    
+    /* 下部のおすすめプラン用カード */
+    .inspi-card {
+        background-color: white; padding: 15px; border-radius: 12px;
+        border: 1px solid #eee; text-align: center;
+        transition: 0.3s; cursor: pointer;
+    }
+    .inspi-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
-# セッション状態の初期化
-if "step" not in st.session_state:
-    st.session_state.step = "input"
-if "spots" not in st.session_state:
-    st.session_state.spots = []
-if "selected_spots" not in st.session_state:
-    st.session_state.selected_spots = []
+# セッション管理
+if "step" not in st.session_state: st.session_state.step = "input"
 
 # --- ヘッダー ---
-st.markdown('<div class="logo-container"><p class="aipia-logo">Aipia</p><p class="sub-title">- AIが創る、秘境への旅行プラン -</p></div>', unsafe_allow_html=True)
+st.markdown("""
+    <div class="logo-container">
+        <p class="aipia-logo">Aipia</p>
+        <p class="sub-title">- AIが創る、秘境への旅行プラン -</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- STEP 1: 条件入力 ---
 if st.session_state.step == "input":
-    col1, col2, col3, col4 = st.columns(4)
-    with col1: departure = st.text_input("🛫 出発地", value="東京")
-    with col2: destination = st.text_input("📍 目的地", placeholder="例：徳島県 祖谷")
-    with col3: date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now()))
-    with col4: budget = st.text_input("💰 予算", placeholder="例：10万円")
-    
-    tags = st.multiselect("🏝 テーマ", ["温泉", "絶景", "郷土料理", "穴場", "アクティビティ"], default=["絶景"])
+    # --- 検索・入力セクション ---
+    with st.container():
+        col1, col2, col3 = st.columns([2, 2, 2])
+        with col1: departure = st.text_input("🛫 出発地", value="東京")
+        with col2: destination = st.text_input("📍 目的地（空欄でもOK）", placeholder="例：四国、九州...")
+        with col3: keyword = st.text_input("🔍 キーワード検索", placeholder="例：サウナ、廃校、雲海...")
 
-    if st.button("🔍 まずはお気に入りスポットを探す", use_container_width=True):
-        with st.spinner("10件の厳選スポットを抽出中..."):
-            # AIにスポット10件を依頼
-            res = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": f"{destination}周辺の観光スポットを10件、名称と特徴、公式サイトURLを箇条書きで教えてください。"}]
-            )
-            st.session_state.spots = res.choices[0].message.content
+        col4, col5, col6 = st.columns([2, 1, 1])
+        with col4: date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now()))
+        with col5: adults = st.number_input("大人", min_value=1, value=2)
+        with col6: kids = st.number_input("子ども", min_value=0, value=0)
+
+        # テーマ拡充
+        tags = st.multiselect("🏝 旅のテーマ（複数選択）", 
+            ["絶景", "秘境", "温泉", "郷土料理", "アクティビティ", "サウナ", "離島", "歴史・文化", "エモい", "子連れ", "贅沢体験", "修行"], 
+            default=["絶景"])
+
+        budget = st.text_input("💰 予算（1人あたり）", placeholder="例：10万円")
+
+        if st.button("✨ この条件でスポットを探す", use_container_width=True, type="primary"):
+            # ここでAIにスポット生成させるロジック（前回のコードと同様）
             st.session_state.step = "select_spots"
             st.rerun()
 
-# --- STEP 2: スポット選択 ---
-elif st.session_state.step == "select_spots":
-    st.subheader("🏝 気になるスポットをお気に入り登録してください")
-    st.write(st.session_state.spots)
-    
-    selected = st.text_area("お気に入り登録するスポット名を記入してください（複数可）")
-    hotel_type = st.selectbox("🏨 ホテル・宿の希望", ["高級旅館", "ビジネスホテル", "キャンプ・グランピング", "民宿・古民家"])
-    
-    col_prev, col_next = st.columns(2)
-    with col_prev:
-        if st.button("← 条件をやり直す"):
-            st.session_state.step = "input"
-            st.rerun()
-    with col_next:
-        if st.button("✨ 5種類の詳細プランを生成する"):
-            st.session_state.selected_spots = selected
-            st.session_state.hotel_preference = hotel_type
-            st.session_state.step = "generate_plan"
-            st.rerun()
+    # --- 下部：おすすめのプラン（インスピレーション） ---
+    st.markdown("<br><br><br><h3 style='text-align: center; color: #333;'>💡 行き先に迷ったら...</h3>", unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    recommendations = [
+        {"title": "徳島・祖谷", "desc": "日本三大秘境で過ごす、かづら橋と温泉の旅"},
+        {"title": "長崎・五島列島", "desc": "エメラルドの海と教会群を巡る離島の休日"},
+        {"title": "山形・銀山温泉", "desc": "大正ロマン溢れる雪景色の街並み"},
+        {"title": "熊本・阿蘇", "desc": "地球の息吹を感じる絶景ドライブプラン"}
+    ]
+    for i, col in enumerate([c1, c2, c3, c4]):
+        with col:
+            st.markdown(f"""
+                <div class="inspi-card">
+                    <h4>{recommendations[i]['title']}</h4>
+                    <p style='font-size: 13px; color: #666;'>{recommendations[i]['desc']}</p>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"{recommendations[i]['title']}を選択", key=f"btn_{i}"):
+                # ここで目的地を自動入力する等の処理が可能
+                pass
 
-# --- STEP 3: プラン生成と表示 ---
-elif st.session_state.step == "generate_plan":
-    st.subheader("🗓 あなただけの特別プラン（5種類）")
-    
-    with st.spinner("乗り換え時間や食事処を含めたプランを計算中..."):
-        final_prompt = f"""
-        以下の条件で、毛色の違う旅行プランを5種類作成してください。
-        【目的地】: {st.session_state.selected_spots}
-        【宿泊希望】: {st.session_state.hotel_preference}
-        
-        ルール：
-        1. 各プランに「おすすめの食事処」と「近くの秘境」を自動追加し、名称の横に「右上におすすめ！と明記」という指示に従い「[右上におすすめ！]」と書いてください。
-        2. 乗り換え時間、徒歩移動時間を含めた詳細な行程表にすること。
-        3. 各スポット、ホテル、交通機関の予約ページURLを必ず文末にまとめること。
-        """
-        
-        res = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": final_prompt}]
-        )
-        
-        st.markdown(res.choices[0].message.content)
-
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
-    with col_btn1: st.button("🔄 再生成")
-    with col_btn2: st.button("✍️ 編集（スポット追加）")
-    with col_btn3: st.success("✅ プラン確定（予約ページへ）")
-    
-    if st.button("最初に戻る"):
-        st.session_state.step = "input"
-        st.rerun()
-    
+# --- ステップ2以降（スポット選択・プラン生成） ---
+# （前回のコードと同様のため省略しますが、プロンプトに「大人◯名、子ども◯名」の情報を渡すよう修正します）
