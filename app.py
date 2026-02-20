@@ -1,7 +1,6 @@
 import streamlit as st
 from groq import Groq
 from datetime import datetime, timedelta
-import re
 import urllib.parse
 
 # 1. ページ設定
@@ -26,6 +25,7 @@ st.markdown("""
     }
     .spot-image { width: 280px; height: 180px; object-fit: cover; background: #EEE; }
     .spot-content { padding: 20px; flex: 1; }
+    .spot-title { font-size: 1.3rem; font-weight: bold; color: #111; margin-bottom: 8px; }
 
     .plan-outer-card {
         background: #FFFFFF; border-radius: 24px; border: 1px solid #EAEAEA; 
@@ -47,7 +47,7 @@ if "found_spots" not in st.session_state: st.session_state.found_spots = []
 if "selected_spots" not in st.session_state: st.session_state.selected_spots = []
 if "final_plans" not in st.session_state: st.session_state.final_plans = {}
 
-# 左上のロゴリンク
+# 左上のロゴ
 st.markdown('<div class="top-nav">', unsafe_allow_html=True)
 if st.button("Aipia", key="home_btn"):
     st.session_state.clear()
@@ -57,19 +57,40 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="header-container"><p class="aipia-logo">Aipia</p><p class="aipia-sub">- AIが創る、秘境への旅行プラン -</p></div>', unsafe_allow_html=True)
 
+# スポット取得関数（修正版：パースロジックの強化）
 def get_spots(dest, tags, count=10, exclude_names=[]):
-    exclude_text = f"（{', '.join(exclude_names)} 以外の場所）" if exclude_names else ""
-    prompt = f"{dest}周辺のテーマ「{tags}」に合う実在施設を必ず{count}件挙げてください{exclude_text}。形式：【名称】、【解説】、【検索名】。最後に「---」で区切ってください。"
+    exclude_text = f"ただし、以下のスポットは既に挙げたので除外してください：{', '.join(exclude_names)}" if exclude_names else ""
+    prompt = f"""
+    {dest}周辺でテーマ「{tags}」に合う実在の観光スポットや飲食店を必ず{count}件リストアップしてください。
+    各スポットを必ず以下の区切り文字「@@@」で区切り、項目を「|」で区切って出力してください。
+    形式：
+    @@@名称|解説|写真検索用英語名@@@
+    
+    例：
+    @@@兼六園|日本三名園の一つ。四季折々の美しさ。|Kenrokuen Garden@@@
+    
+    {exclude_text}
+    """
     res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
-    items = res.choices[0].message.content.split("---")
+    raw_content = res.choices[0].message.content
+    
     results = []
+    items = raw_content.split("@@@")
     for item in items:
-        name = re.search(r"【名称】\s*(.*)", item); desc = re.search(r"【解説】\s*(.*)", item); key = re.search(r"【検索名】\s*(.*)", item)
-        if name:
-            results.append({"name": name.group(1).strip(), "desc": desc.group(1).strip() if desc else "", "img": f"https://source.unsplash.com/featured/?{urllib.parse.quote(key.group(1).strip() if key else name.group(1).strip())},Japan"})
+        if "|" in item:
+            parts = item.split("|")
+            if len(parts) >= 2:
+                name = parts[0].strip()
+                desc = parts[1].strip()
+                key = parts[2].strip() if len(parts) > 2 else name
+                results.append({
+                    "name": name,
+                    "desc": desc,
+                    "img": f"https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=800&auto=format&fit=crop&q={urllib.parse.quote(key)}" # 安定した画像生成
+                })
     return results[:count]
 
-# STEP 1
+# STEP 1: 入力
 if st.session_state.step == "input":
     st.markdown('<h3 style="text-align:center;">01. Travel Profile</h3>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
@@ -86,44 +107,64 @@ if st.session_state.step == "input":
 
     if st.button("⚜️ 厳選スポットを調査する", use_container_width=True, type="primary"):
         st.session_state.form_data = {"dep": dep, "dest": dest, "budget": bud, "tags": tags, "adults": adults, "kids": kids, "start_time": start_time.strftime("%H:%M"), "days": (date_range[1]-date_range[0]).days + 1 if isinstance(date_range, tuple) and len(date_range)==2 else 1}
-        st.session_state.found_spots = get_spots(dest, tags, 10)
-        st.session_state.step = "select_spots"; st.rerun()
+        with st.spinner("現地情報を精査中..."):
+            st.session_state.found_spots = get_spots(dest, tags, 10)
+            st.session_state.step = "select_spots"; st.rerun()
 
-# STEP 2
+# STEP 2: スポット選択
 elif st.session_state.step == "select_spots":
     st.markdown(f'<h3 style="text-align:center;">02. {st.session_state.form_data["dest"]} の候補地</h3>', unsafe_allow_html=True)
-    for i, spot in enumerate(st.session_state.found_spots):
-        st.markdown(f'<div class="spot-selection-card"><img src="{spot["img"]}" class="spot-image"><div class="spot-content"><div class="spot-title">{spot["name"]}</div><p>{spot["desc"]}</p></div></div>', unsafe_allow_html=True)
-        if st.checkbox(f"{spot['name']} を採用", key=f"check_{i}", value=spot['name'] in st.session_state.selected_spots):
-            if spot['name'] not in st.session_state.selected_spots: st.session_state.selected_spots.append(spot['name'])
-        else:
-            if spot['name'] in st.session_state.selected_spots: st.session_state.selected_spots.remove(spot['name'])
-    c_more, c_next = st.columns(2)
-    with c_more:
-        if st.button("➕ More（さらに10個出す）", use_container_width=True):
-            st.session_state.found_spots.extend(get_spots(st.session_state.form_data["dest"], st.session_state.form_data["tags"], 10, [s['name'] for s in st.session_state.found_spots])); st.rerun()
-    with c_next:
-        if st.button("🏨 確定して詳細設定へ", use_container_width=True, type="primary"): st.session_state.step = "select_details"; st.rerun()
+    
+    if not st.session_state.found_spots:
+        st.error("スポットが見つかりませんでした。もう一度お試しください。")
+        if st.button("戻る"): st.session_state.step = "input"; st.rerun()
+    else:
+        for i, spot in enumerate(st.session_state.found_spots):
+            st.markdown(f"""
+                <div class="spot-selection-card">
+                    <img src="{spot['img']}" class="spot-image">
+                    <div class="spot-content">
+                        <div class="spot-title">{spot['name']}</div>
+                        <p style="color:#555;">{spot['desc']}</p>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.checkbox(f"{spot['name']} を採用", key=f"check_{i}", value=spot['name'] in st.session_state.selected_spots):
+                if spot['name'] not in st.session_state.selected_spots: st.session_state.selected_spots.append(spot['name'])
+            else:
+                if spot['name'] in st.session_state.selected_spots: st.session_state.selected_spots.remove(spot['name'])
 
-# STEP 3
+        c_more, c_next = st.columns(2)
+        with c_more:
+            if st.button("➕ More（さらに10個出す）", use_container_width=True):
+                with st.spinner("追加スポットを探索中..."):
+                    existing = [s['name'] for s in st.session_state.found_spots]
+                    st.session_state.found_spots.extend(get_spots(st.session_state.form_data["dest"], st.session_state.form_data["tags"], 10, existing))
+                    st.rerun()
+        with c_next:
+            if st.button("🏨 確定して詳細設定へ", use_container_width=True, type="primary"): 
+                if not st.session_state.selected_spots: st.warning("スポットを選択してください")
+                else: st.session_state.step = "select_details"; st.rerun()
+
+# STEP 3: 詳細設定
 elif st.session_state.step == "select_details":
     st.markdown('<h3 style="text-align:center;">03. プランニング・ポリシー</h3>', unsafe_allow_html=True)
     speed = st.select_slider("🚶 歩行速度", options=["ゆったり", "標準", "アクティブ"], value="標準")
-    # ここに「バリアフリー対応」を追加
     h_pref = st.multiselect("🏨 宿泊のこだわり", ["バリアフリー対応（車椅子・段差配慮）", "露天風呂付客室", "離れ・一棟貸し", "歴史的建築", "サウナ", "美食の宿"], default=["露天風呂付客室"])
     if st.button("⚜️ 5つの緻密なプランを生成する", use_container_width=True, type="primary"):
         st.session_state.form_data.update({"speed": speed, "h_pref": h_pref})
         st.session_state.step = "final_plan"; st.rerun()
 
-# STEP 4
+# STEP 4: 最終プラン
 elif st.session_state.step == "final_plan":
     f = st.session_state.form_data
     if not st.session_state.final_plans:
         with st.spinner("究極の旅程を編纂中..."):
             for label in ["プランA", "プランB", "プランC", "プランD", "プランE"]:
-                prompt = f"一流コンシェルジュとして、{f['days']}日間の緻密なプランを作成。出発：{f['dep']}（{f['start_time']}発）、拠点：{f['dest']}。選択スポット：{', '.join(st.session_state.selected_spots)}。宿泊こだわり：{f['h_pref']}。宿泊は1拠点固定とし冒頭に<div class='base-hotel-card'>でホテル名明記。特にバリアフリー希望がある場合は移動ルートや施設選びに配慮せよ。30分単位のタイムライン、Google検索URL、全体を<div class='plan-outer-card'>で囲みHTML形式で出力。"
+                prompt = f"一流コンシェルジュとして、{f['days']}日間の緻密なプランを作成。出発：{f['dep']}（{f['start_time']}発）、拠点：{f['dest']}。選択スポット：{', '.join(st.session_state.selected_spots)}。宿泊こだわり：{f['h_pref']}。宿泊は1拠点固定とし冒頭に<div class='base-hotel-card'>でホテル名明記。30分単位のタイムライン、全体を<div class='plan-outer-card'>で囲みHTML形式で出力。"
                 res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
                 st.session_state.final_plans[label] = res.choices[0].message.content
+    
     tabs = st.tabs(list(st.session_state.final_plans.keys()))
     for label, tab in zip(st.session_state.final_plans.keys(), tabs):
         with tab:
