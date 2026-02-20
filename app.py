@@ -32,7 +32,7 @@ if st.session_state.step == "input":
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1: departure = st.text_input("🛫 出発地", value="東京")
     with col2: destination = st.text_input("📍 目的地", placeholder="例：四国、九州...")
-    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：廃校、雲海...")
+    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：絶景、穴場、サウナ...")
 
     col4, col5, col6, col7 = st.columns([2, 1, 1, 2])
     with col4: date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now()))
@@ -40,24 +40,29 @@ if st.session_state.step == "input":
     with col6: kids = st.number_input("子ども", min_value=0, value=0)
     with col7: walking_speed = st.select_slider("🚶 歩くスピード", options=["ゆっくり", "標準", "せっかち"], value="標準")
 
-    st.write("### 🏨 宿泊のこだわり")
+    st.write("### 🏨 宿泊・お部屋の希望")
     c_h1, c_h2, c_h3 = st.columns(3)
-    with c_h1: hotel_type = st.selectbox("タイプ", ["こだわらない", "高級旅館", "リゾートホテル", "ビジネスホテル", "古民家・民宿", "グランピング"])
-    with c_h2: room_size = st.selectbox("部屋の広さ", ["こだわらない", "20㎡以上(標準)", "40㎡以上(広め)", "100㎡以上(贅沢)"])
-    with c_h3: room_pref = st.multiselect("客室設備", ["露天風呂付き", "オーシャンビュー", "和室", "洋室(ベッド)", "禁煙", "Wi-Fi完備"])
+    with c_h1: 
+        hotel_type = st.selectbox("ホテルの種類", ["こだわらない", "高級旅館", "リゾートホテル", "カジュアルホテル", "古民家・民宿"])
+        room_size_pref = st.radio("お部屋の広さ", ["人数に合わせる", "少しゆったりめ", "とにかく広く！"], horizontal=True)
+    with c_h2: 
+        room_type = st.multiselect("お部屋のタイプ", ["和室", "洋室(ベッド)", "和洋室", "離れ・一棟貸し"])
+        special_req = st.multiselect("こだわり条件", ["露天風呂付き客室", "禁煙ルーム", "喫煙ルーム", "ペット同伴可"])
+    with c_h3:
+        barrier_free = st.multiselect("安心・バリアフリー", ["バリアフリー対応", "車椅子利用", "段差が少ない", "エレベーター近く"])
 
-    tags = st.multiselect("🏝 旅のテーマ", ["絶景", "秘境", "温泉", "郷土料理", "アクティビティ", "サウナ", "離島", "エモい"], default=["絶景"])
+    tags = st.multiselect("🏝 旅のテーマ", ["絶景", "秘境", "温泉", "郷土料理", "アクティビティ", "サウナ", "歴史・文化"], default=["絶景"])
     budget_input = st.text_input("💰 予算（1人あたり）", placeholder="例：10万円")
 
     if st.button("✨ この条件でスポットを探す", use_container_width=True, type="primary"):
-        with st.spinner("AIがバラエティ豊かなスポットを選定中..."):
+        with st.spinner("AIが最適なスポットを厳選中..."):
             st.session_state.form_data = {
                 "adults": adults, "kids": kids, "budget": budget_input, 
-                "speed": walking_speed, "hotel": hotel_type, "room": room_size, "pref": room_pref
+                "speed": walking_speed, "hotel": hotel_type, "room_size": room_size_pref,
+                "room_type": room_type, "special": special_req, "barrier": barrier_free, "tags": tags
             }
             target = destination if destination else keyword
-            # 温泉ばかりにならないよう「多様性」を指示
-            prompt = f"""{target}周辺で、テーマ『{tags}』に関連するスポットを6件、それ以外のジャンル（グルメ、歴史、穴場体験など）を4件、計10件提案してください。
+            prompt = f"""{target}周辺で、テーマ『{tags}』に関連するスポットを6件、それ以外のジャンルを4件、計10件提案してください。
             形式：
             名称: (スポット名)
             解説: (100文字程度)
@@ -89,7 +94,7 @@ elif st.session_state.step == "select_spots":
             if st.checkbox("⭐", key=f"fav_{i}"): selected_names.append(name)
         with col_main:
             c_img, c_txt = st.columns([1, 2])
-            with c_img: st.image(f"https://picsum.photos/seed/travel_{i+200}/600/400", use_container_width=True)
+            with c_img: st.image(f"https://picsum.photos/seed/aipia_spot_{i}/600/400", use_container_width=True)
             with c_txt:
                 st.markdown(f"### {name}")
                 st.write(details.get("解説", ""))
@@ -107,17 +112,24 @@ elif st.session_state.step == "select_spots":
 elif st.session_state.step == "final_plan":
     st.subheader("🗓 あなただけの特別プラン（5種類）")
     f = st.session_state.form_data
-    with st.spinner("歩行速度と宿泊希望を反映中..."):
-        prompt = f"""以下の条件で5種類の旅行プランを作成してください。
-        【基本】大人{f['adults']}名、子供{f['kids']}名、予算{f['budget']}
-        【移動】歩くスピードは「{f['speed']}」です。移動時間はこれに合わせて調整してください。
-        【宿泊】{f['hotel']}タイプ、広さ{f['room']}、希望設備：{f['pref']}。これらに合致する具体的な宿名を提案してください。
+    with st.spinner("詳細な旅行プランを練り上げています..."):
+        prompt = f"""以下の条件で、毛色の違う5種類の旅行プランを作成してください。
+        【基本構成】大人{f['adults']}名、子供{f['kids']}名、予算1人あたり{f['budget']}
+        【移動】歩行速度は「{f['speed']}」を想定したスケジュールにしてください。
+        【宿泊希望】
+        - 宿タイプ: {f['hotel']}
+        - 部屋の広さ感: {f['room_size']}
+        - 部屋タイプ: {f['room_type']}
+        - こだわり: {f['special']}
+        - バリアフリー要望: {f['barrier']}
+        これらを考慮し、特に{f['adults'] + f['kids']}名全員が快適に過ごせる具体的な宿名を提案してください。
+        
         【選択スポット】{st.session_state.selected_names}
         
-        ルール：
-        - スポット間の移動は、歩行速度「{f['speed']}」を考慮したリアルな時間を記載。
+        指示：
+        - 各日の行程に、歩くスピードを考慮したリアルな時間を記載。
         - 食事処には[右上におすすめ！]と明記。
-        - 予約URL、公式URL、交通チケット購入URLを必ず含めてください。
+        - 最後に予約ページ、交通チケットURL、スポットの公式URLをまとめて表示。
         """
         res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
         st.markdown(f'<div class="plan-card">{res.choices[0].message.content}</div>', unsafe_allow_html=True)
