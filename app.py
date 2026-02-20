@@ -1,107 +1,70 @@
 import streamlit as st
 from groq import Groq
 
-# ページ設定：横幅を広く使う
+# 1. ページ設定
 st.set_page_config(layout="wide", page_title="Aipia - AI Travel Planner")
 
-# 1. APIキーの設定
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-
-# 2. デザイン（CSS）：画像のような色使いとフォントを再現
+# 2. デザイン（CSS）
 st.markdown("""
     <style>
-    /* 全体の背景色（ほんのり暖色） */
-    .stApp {
-        background-color: #FCF9F2;
-    }
-    /* サイドバーのスタイル */
-    [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #eee;
-    }
-    /* タイトルのデザイン */
+    .stApp { background-color: #FCF9F2; }
     .aipia-logo {
-        font-family: 'Georgia', serif;
-        font-style: italic;
-        font-size: 60px;
-        font-weight: bold;
-        color: #111;
-        text-align: center;
-        margin-bottom: -10px;
+        font-family: 'Georgia', serif; font-style: italic;
+        font-size: 60px; font-weight: bold; color: #111;
+        text-align: center; margin-bottom: -10px;
     }
     .sub-title {
-        text-align: center;
-        color: #555;
-        font-weight: bold;
-        letter-spacing: 2px;
-        margin-bottom: 30px;
+        text-align: center; color: #555; font-weight: bold;
+        letter-spacing: 2px; margin-bottom: 30px;
     }
-    /* 入力エリアのカード風デザイン */
-    .input-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
+    /* プラン表示用カード */
+    .plan-card {
+        background-color: white; padding: 25px;
+        border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        border: 1px solid #eee; margin-top: 20px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- サイドバー：設定項目 ---
-with st.sidebar:
-    st.image("https://picsum.photos/seed/travel/200/100", use_container_width=True) # 仮のロゴ画像
-    st.header("📍 旅の条件")
-    departure = st.text_input("出発地", value="東京")
-    destination = st.text_input("目的地", placeholder="どこへ行きたいですか？")
-    dates = st.date_input("日程", [])
-    budget = st.select_slider("予算感", options=["節約", "標準", "贅沢"])
-    
-    st.divider()
-    st.subheader("★ 登録したスポット")
-    st.info("まだスポットが登録されていません")
+# 3. クライアント設定
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- メインエリア：ロゴとチャット ---
+# --- ヘッダー ---
 st.markdown('<p class="aipia-logo">Aipia</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">-AIが創る、秘境への旅行プラン-</p>', unsafe_allow_html=True)
 
-# AIの性格設定
-SYSTEM_PROMPT = f"""
-あなたは旅行プランナー「Aipia」です。
-ユーザーの希望（出発地：{departure}、目的地：{destination}、予算：{budget}）に基づき、
-誰も知らないような「秘境」を組み込んだ、ワクワクする2パターンの旅行プランを作成してください。
-"""
+# --- 選択・入力エリア ---
+# 画像のように横並びの入力欄を作る
+col1, col2, col3, col4 = st.columns(4)
 
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+with col1:
+    departure = st.text_input("🛫 出発地", value="東京")
+with col2:
+    destination = st.text_input("📍 目的地", placeholder="例：四国、九州など")
+with col3:
+    duration = st.selectbox("📅 期間", ["日帰り", "1泊2日", "2泊3日", "3泊4日以上"])
+with col4:
+    budget = st.selectbox("💰 予算感", ["節約", "標準", "贅沢"])
 
-# チャット表示
-chat_container = st.container()
-with chat_container:
-    for msg in st.session_state.messages:
-        if msg["role"] != "system":
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+# スポット選択（複数選択式）
+st.write("### 🏝 気になるテーマを選んでください")
+tags = st.multiselect(
+    "AIがプランに組み込みます",
+    ["温泉", "絶景", "郷土料理", "穴場", "アクティビティ", "歴史・文化", "インスタ映え", "のんびり"],
+    default=["絶景", "穴場"]
+)
 
-# 入力欄
-if prompt := st.chat_input("プランの要望を詳しく教えてください（例：温泉に入りたい、3日間で回りたい）"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
+# --- プラン作成ボタン ---
+st.markdown("<br>", unsafe_allow_html=True)
+create_button = st.button("✨ 究極のスポットからプランを作成する", use_container_width=True, type="primary")
 
-    # Groqで回答生成
-    with st.chat_message("assistant"):
-        response_placeholder = st.empty()
-        full_response = ""
-        
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=st.session_state.messages,
-            stream=True
-        )
-        for chunk in response:
-            if chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
-                response_placeholder.markdown(full_response + "▌")
-        response_placeholder.markdown(full_response)
-        
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+# --- ロジック部分 ---
+if create_button:
+    if not destination:
+        st.error("目的地を入力してください！")
+    else:
+        with st.spinner("AIが秘境プランを練っています..."):
+            # AIへの指示を組み立て
+            prompt = f"""
+            以下の条件で最高の旅行プランを2つ提案してください。
+            【出発地】: {departure}
