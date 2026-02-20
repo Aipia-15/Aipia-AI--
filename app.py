@@ -7,7 +7,7 @@ client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 st.title("My AI App (OpenAI Edition)")
 
 # 2. AI Studioから持ってきた「指示」をここに貼る
-SYSTEM_PROMPT = "import React from 'react';
+SYSTEM_PROMPT = """import React from 'react';
 import { TravelPlan, Language, FavoriteItem } from '../types';
 import { translations } from '../translations';
 
@@ -96,7 +96,7 @@ const HistoryList: React.FC<HistoryListProps> = ({ history, onSelect, onClear, o
       </div>
     </div>
   );
-};
+};"""
 
 export default HistoryList;
 " 
