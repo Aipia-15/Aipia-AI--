@@ -8,7 +8,7 @@ st.set_page_config(layout="wide", page_title="Aipia")
 # 2. クライアント設定
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. デザイン (CSS) - 重なりとサイズを徹底修正
+# 3. デザイン (CSS) - 限界突破のサイズ設定
 st.markdown("""
     <style>
     .stApp { background-color: #FCF9F2; }
@@ -16,50 +16,51 @@ st.markdown("""
     /* ロゴコンテナ */
     .logo-container { 
         text-align: center; 
-        padding: 100px 0 150px 0; 
+        padding: 50px 0 100px 0; 
         position: relative;
+        overflow: hidden; /* はみ出し防止 */
     }
     
-    /* Aipiaロゴ：絶対的な主役、何物にも重ならない */
+    /* Aipiaロゴ：画面幅いっぱいに広がる超巨大フォント */
     .aipia-logo { 
         font-family: 'Georgia', serif; font-style: italic; 
-        font-size: 1000px; 
+        font-size: 35vw; /* 画面幅の35%という巨大指定 */
         font-weight: bold; color: #111; 
-        line-height: 1.9; 
-        letter-spacing: 30px; 
+        line-height: 1.0; 
+        letter-spacing: -0.02em; /* わずかに詰め気味にして迫力を出す */
         margin: 0;
         position: relative;
+        z-index: 10;
     }
     
-    /* サブタイトル：大きく、かつ棒のデザインを統合 */
+    /* サブタイトル：これ自体が巨大な壁のような存在感 */
     .sub-title { 
-        font-size: 500px; 
+        font-size: 6vw; /* 画面幅に合わせて巨大化 */
         color: #111; font-weight: bold; 
-        letter-spacing: 10px; 
-        margin-top: 25px;
-        padding: 25px 0;
+        letter-spacing: 1.5vw; 
+        margin-top: -20px;
+        padding: 40px 0;
         display: inline-block;
-        border-top: 1px solid #111; /* 黒い棒をより太く、文字との距離を確保 */
-        border-bottom: 1px solid #111;
+        border-top: 20px solid #111; /* 圧倒的に太い黒棒 */
+        border-bottom: 20px solid #111;
         line-height: 1.1;
         position: relative;
         z-index: 5;
     }
 
-    /* レスポンシブ調整（スマホで見ても小さくならないように） */
-    @media (max-width: 1400px) {
-        .aipia-logo { font-size: 280px; }
-        .sub-title { font-size: 80px; letter-spacing: 10px; }
-    }
+    /* レスポンシブ調整（スマホ版もさらに強化） */
     @media (max-width: 768px) {
-        .aipia-logo { font-size: 120px; letter-spacing: 2px; }
-        .sub-title { font-size: 35px; letter-spacing: 5px; border-top: 8px solid #111; border-bottom: 8px solid #111; }
+        .aipia-logo { font-size: 150px; line-height: 1.1; }
+        .sub-title { 
+            font-size: 30px; 
+            letter-spacing: 5px; 
+            border-top: 10px solid #111; 
+            border-bottom: 10px solid #111; 
+            padding: 20px 0;
+        }
+        .logo-container { padding: 40px 0; }
     }
     
-    /* フォームの文字はあえて小さく洗練させる */
-    .stTextInput label, .stSelectbox label, .stSlider label {
-        font-size: 16px !important; color: #555 !important;
-    }
     .plan-card {
         background-color: white; padding: 60px; border-radius: 40px;
         font-size: 20px; line-height: 2.2; border: 1px solid #eee;
@@ -83,7 +84,7 @@ st.markdown("""
 
 # --- STEP 1: 入力 ---
 if st.session_state.step == "input":
-    st.markdown("<h2 style='text-align:center;'>TRAVEL CONFIG</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; font-size: 40px; margin-bottom: 40px;'>TRAVEL CONFIG</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     with col1: departure = st.text_input("🛫 出発地", value="東京")
     with col2: destination = st.text_input("📍 目的地", placeholder="例：長野、徳島...")
@@ -95,7 +96,6 @@ if st.session_state.step == "input":
     with col6: kids = st.number_input("子ども", 0, 10, 0)
     with col7: walking_speed = st.select_slider("🚶 歩行速度", options=["ゆっくり", "標準", "せっかち"])
 
-    # 詳細設定
     c1, c2, c3 = st.columns(3)
     with c1: hotel_type = st.selectbox("宿タイプ", ["こだわらない", "高級旅館", "リゾート"])
     with c2: room_pref = st.multiselect("部屋・こだわり", ["和室", "洋室", "露天風呂付", "禁煙"])
@@ -122,7 +122,7 @@ elif st.session_state.step == "select_spots":
         details = {line.split(":", 1)[0].strip(): line.split(":", 1)[1].strip() for line in spot.split("\n") if ":" in line}
         name = details.get("名称", f"Spot {i+1}")
         with st.container():
-            st.markdown(f'<div style="background:white; padding:30px; border-radius:20px; margin-bottom:20px;">', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:white; padding:30px; border-radius:20px; margin-bottom:20px; border: 1px solid #eee;">', unsafe_allow_html=True)
             if st.checkbox(f"⭐ {name}", key=f"f_{i}"): selected_names.append(name)
             st.write(details.get("解説", ""))
             st.markdown('</div>', unsafe_allow_html=True)
@@ -132,19 +132,16 @@ elif st.session_state.step == "select_spots":
         st.session_state.step = "final_plan"
         st.rerun()
 
-# --- STEP 3: 最終プラン（修正済み） ---
+# --- STEP 3: 最終プラン ---
 elif st.session_state.step == "final_plan":
     st.markdown("<h2 style='text-align:center;'>YOUR JOURNEY</h2>", unsafe_allow_html=True)
-    
-    # まだプランが生成されていない場合のみAIにリクエスト
     if not st.session_state.final_plan_content:
         f = st.session_state.form_data
-        with st.spinner("AIが最高の旅程を書き上げています..."):
-            prompt = f"大人{f['adults']}名、予算{f['budget']}、歩行「{f['speed']}」。宿：{f['hotel']}、こだわり：{f['room']}、バリアフリー：{f['barrier']}。スポット：{st.session_state.selected_names}。これらを元に、詳細な5つの旅行プランを作成してください。"
+        with st.spinner("旅程を生成中..."):
+            prompt = f"大人{f['adults']}名、予算{f['budget']}、歩行「{f['speed']}」。宿：{f['hotel']}、こだわり：{f['room']}、バリアフリー：{f['barrier']}。スポット：{st.session_state.selected_names}。詳細な5つの旅行プランを作成。"
             res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
             st.session_state.final_plan_content = res.choices[0].message.content
 
-    # 生成された（または保存されている）プランを表示
     st.markdown(f'<div class="plan-card">{st.session_state.final_plan_content}</div>', unsafe_allow_html=True)
 
     if st.button("← 条件を変えて最初からやり直す", use_container_width=True):
