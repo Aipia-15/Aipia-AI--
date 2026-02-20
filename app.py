@@ -23,7 +23,7 @@ st.markdown("""
     /* Aipiaロゴ：絶対的な主役、何物にも重ならない */
     .aipia-logo { 
         font-family: 'Georgia', serif; font-style: italic; 
-        font-size: 450px; 
+        font-size: 1000px; 
         font-weight: bold; color: #111; 
         line-height: 0.9; 
         letter-spacing: 5px; 
@@ -34,11 +34,11 @@ st.markdown("""
     
     /* サブタイトル：大きく、かつ棒のデザインを統合 */
     .sub-title { 
-        font-size: 120px; 
+        font-size: 500px; 
         color: #111; font-weight: bold; 
-        letter-spacing: 15px; 
-        margin-top: 50px;
-        padding: 50px 0;
+        letter-spacing: 10px; 
+        margin-top: 25px;
+        padding: 25px 0;
         display: inline-block;
         border-top: 15px solid #111; /* 黒い棒をより太く、文字との距離を確保 */
         border-bottom: 15px solid #111;
