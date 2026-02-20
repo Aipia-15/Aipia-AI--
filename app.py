@@ -31,8 +31,8 @@ st.markdown('<div class="logo-container"><p class="aipia-logo">Aipia</p><p class
 if st.session_state.step == "input":
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1: departure = st.text_input("🛫 出発地", value="東京")
-    with col2: destination = st.text_input("📍 目的地", placeholder="例：四国、九州...")
-    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：絶景、穴場、サウナ...")
+    with col2: destination = st.text_input("📍 目的地", placeholder="例：徳島県祖谷、長野県上高地...")
+    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：廃校カフェ、雲海テラス...")
 
     col4, col5, col6, col7 = st.columns([2, 1, 1, 2])
     with col4: date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now()))
@@ -47,29 +47,32 @@ if st.session_state.step == "input":
         room_size_pref = st.radio("お部屋の広さ", ["人数に合わせる", "少しゆったりめ", "とにかく広く！"], horizontal=True)
     with c_h2: 
         room_type = st.multiselect("お部屋のタイプ", ["和室", "洋室(ベッド)", "和洋室", "離れ・一棟貸し"])
-        special_req = st.multiselect("こだわり条件", ["露天風呂付き客室", "禁煙ルーム", "喫煙ルーム", "ペット同伴可"])
+        special_req = st.multiselect("こだわり条件", ["露天風呂付き客室", "禁煙ルーム", "ペット同伴可"])
     with c_h3:
-        barrier_free = st.multiselect("安心・バリアフリー", ["バリアフリー対応", "車椅子利用", "段差が少ない", "エレベーター近く"])
+        barrier_free = st.multiselect("安心・バリアフリー", ["バリアフリー対応", "車椅子利用", "段差が少ない"])
 
-    tags = st.multiselect("🏝 旅のテーマ", ["絶景", "秘境", "温泉", "郷土料理", "アクティビティ", "サウナ", "歴史・文化"], default=["絶景"])
+    tags = st.multiselect("🏝 旅のテーマ", ["絶景", "秘境", "温泉", "郷土料理", "アクティビティ", "サウナ"], default=["絶景"])
     budget_input = st.text_input("💰 予算（1人あたり）", placeholder="例：10万円")
 
     if st.button("✨ この条件でスポットを探す", use_container_width=True, type="primary"):
-        with st.spinner("AIが最適なスポットを厳選中..."):
+        with st.spinner("ピンポイントな秘境スポットを探しています..."):
             st.session_state.form_data = {
                 "adults": adults, "kids": kids, "budget": budget_input, 
                 "speed": walking_speed, "hotel": hotel_type, "room_size": room_size_pref,
                 "room_type": room_type, "special": special_req, "barrier": barrier_free, "tags": tags
             }
             target = destination if destination else keyword
-            prompt = f"""{target}周辺で、テーマ『{tags}』に関連するスポットを6件、それ以外のジャンルを4件、計10件提案してください。
+            # プロンプトを大幅強化：名称に地域名を出すなと指示
+            prompt = f"""{target}周辺で、テーマ『{tags}』に沿った具体的な『施設名・店舗名・場所名』を10件提案してください。
+            注意：県名や市町村名を名称にしないでください。必ずピンポイントなスポット名を挙げてください。
+            
             形式：
-            名称: (スポット名)
-            解説: (100文字程度)
-            予算: (金額)
-            おすすめ度: (星5つ)
+            名称: (具体的なスポット名)
+            解説: (その場所で何ができるか、100文字程度)
+            予算: (入場料や飲食代の目安)
+            おすすめ度: (★5つ中)
             混雑度: (低・中・高)
-            URL: (公式サイトURL)
+            URL: (公式サイトURLがあれば)
             ---"""
             res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
             st.session_state.parsed_spots = [s.strip() for s in res.choices[0].message.content.split("---") if "名称:" in s][:10]
@@ -86,6 +89,7 @@ elif st.session_state.step == "select_spots":
             if ":" in line:
                 k, v = line.split(":", 1)
                 details[k.strip()] = v.strip()
+        
         name = details.get("名称", f"スポット {i+1}")
         
         st.markdown('<div class="spot-card">', unsafe_allow_html=True)
@@ -94,11 +98,17 @@ elif st.session_state.step == "select_spots":
             if st.checkbox("⭐", key=f"fav_{i}"): selected_names.append(name)
         with col_main:
             c_img, c_txt = st.columns([1, 2])
-            with c_img: st.image(f"https://picsum.photos/seed/aipia_spot_{i}/600/400", use_container_width=True)
+            with c_img: st.image(f"https://picsum.photos/seed/aipia_v3_{i}/600/400", use_container_width=True)
             with c_txt:
                 st.markdown(f"### {name}")
-                st.write(details.get("解説", ""))
-                st.markdown(f'<div class="status-box"><span>💰 {details.get("予算", "不明")}</span><span>✨ {details.get("おすすめ度", "不明")}</span><span>👥 混雑: {details.get("混雑度", "不明")}</span></div>', unsafe_allow_html=True)
+                st.write(details.get("解説", "詳細情報取得中..."))
+                st.markdown(f"""
+                    <div class="status-box">
+                        <span>💰 {details.get('予算', '不明')}</span>
+                        <span>✨ {details.get('おすすめ度', '不明')}</span>
+                        <span>👥 混雑: {details.get('混雑度', '不明')}</span>
+                    </div>
+                """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if st.button("🚀 選択したスポットでプランを作る", use_container_width=True, type="primary"):
@@ -112,24 +122,17 @@ elif st.session_state.step == "select_spots":
 elif st.session_state.step == "final_plan":
     st.subheader("🗓 あなただけの特別プラン（5種類）")
     f = st.session_state.form_data
-    with st.spinner("詳細な旅行プランを練り上げています..."):
+    with st.spinner("詳細な移動スケジュールを計算中..."):
         prompt = f"""以下の条件で、毛色の違う5種類の旅行プランを作成してください。
-        【基本構成】大人{f['adults']}名、子供{f['kids']}名、予算1人あたり{f['budget']}
-        【移動】歩行速度は「{f['speed']}」を想定したスケジュールにしてください。
-        【宿泊希望】
-        - 宿タイプ: {f['hotel']}
-        - 部屋の広さ感: {f['room_size']}
-        - 部屋タイプ: {f['room_type']}
-        - こだわり: {f['special']}
-        - バリアフリー要望: {f['barrier']}
-        これらを考慮し、特に{f['adults'] + f['kids']}名全員が快適に過ごせる具体的な宿名を提案してください。
-        
+        【基本】大人{f['adults']}名、子供{f['kids']}名、予算{f['budget']}
+        【移動】歩行速度は「{f['speed']}」を想定。
+        【宿泊】{f['hotel']}タイプ、部屋の広さ感「{f['room_size']}」、{f['room_type']}、{f['special']}、{f['barrier']}を考慮。具体的な宿名を提案。
         【選択スポット】{st.session_state.selected_names}
         
         指示：
-        - 各日の行程に、歩くスピードを考慮したリアルな時間を記載。
+        - 行程にリアルな移動時間（徒歩含む）を明記。
         - 食事処には[右上におすすめ！]と明記。
-        - 最後に予約ページ、交通チケットURL、スポットの公式URLをまとめて表示。
+        - 最後に予約・公式URLをまとめて表示。
         """
         res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
         st.markdown(f'<div class="plan-card">{res.choices[0].message.content}</div>', unsafe_allow_html=True)
