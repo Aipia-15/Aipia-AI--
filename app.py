@@ -9,7 +9,7 @@ import time
 st.set_page_config(layout="wide", page_title="Aipia - Executive Concierge")
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 2. デザイン (CSS) - ホーム画面・旅程スタイル
+# 2. デザイン (CSS) - ホーム画面・旅程スタイルを維持
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
@@ -47,12 +47,12 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="header-container"><p class="aipia-logo">Aipia</p><p class="aipia-sub">- AIが創る、秘境への旅行プラン -</p></div>', unsafe_allow_html=True)
 
-# --- STEP 1: 入力 ---
+# --- STEP 1: 入力 (目的地を住所・市区町村対応に) ---
 if st.session_state.step == "input":
     st.markdown('<h3 style="text-align:center;">01. Travel Profile</h3>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1: dep = st.text_input("🛫 出発地", value="新宿駅")
-    with c2: dest = st.text_input("📍 目的地", placeholder="例：上高地")
+    with c2: dest = st.text_input("📍 目的地", placeholder="例：長野県松本市、東京都西新宿など")
     with c3: bud = st.text_input("💰 予算/人", value="5万円")
     c4, c5, c6 = st.columns(3)
     with c4: date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now() + timedelta(days=2)))
@@ -65,56 +65,66 @@ if st.session_state.step == "input":
     if st.button("⚜️ 調査開始", use_container_width=True, type="primary"):
         st.session_state.form_data = {"dest": dest, "days": (date_range[1]-date_range[0]).days + 1 if isinstance(date_range, tuple) and len(date_range)==2 else 1}
         try:
-            res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": f"{dest}の具体的スポット10件。名称|解説|英語名 形式。"}])
+            # 住所・自治体名から周辺の具体的スポットを抽出するプロンプト
+            spot_prompt = f"「{dest}」周辺にある、具体的で実在する観光スポット（神社、展望台、滝、美術館、レストラン等）を10件挙げてください。自治体名そのものは禁止。形式：名称|解説|英語名"
+            res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": spot_prompt}])
             lines = res.choices[0].message.content.strip().split("\n")
-            st.session_state.found_spots = [{"name": l.split("|")[0].strip("- "), "desc": l.split("|")[1], "img": f"https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=800&sig={l}"} for l in lines if "|" in l]
+            st.session_state.found_spots = []
+            for l in lines:
+                if "|" in l:
+                    parts = l.split("|")
+                    name = parts[0].strip("- ")
+                    st.session_state.found_spots.append({
+                        "name": name, 
+                        "desc": parts[1] if len(parts) > 1 else "", 
+                        "img": f"https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=800&sig={urllib.parse.quote(name)}"
+                    })
             st.session_state.step = "select_spots"; st.rerun()
         except: st.error("AIが混み合っています。少し待って再試行してください。")
 
 # --- STEP 2: スポット選択 ---
 elif st.session_state.step == "select_spots":
+    st.markdown(f'<h4 style="text-align:center;">「{st.session_state.form_data["dest"]}」周辺の候補地</h4>', unsafe_allow_html=True)
     for i, spot in enumerate(st.session_state.found_spots):
         st.markdown(f'<div class="spot-selection-card"><img src="{spot["img"]}" class="spot-image"><div class="spot-content"><h4>{spot["name"]}</h4><p>{spot["desc"]}</p></div></div>', unsafe_allow_html=True)
         if st.checkbox(f"{spot['name']} を採用", key=f"c_{i}"):
             if spot['name'] not in st.session_state.selected_spots: st.session_state.selected_spots.append(spot['name'])
-    if st.button("🏨 プラン生成", use_container_width=True, type="primary"):
+    if st.button("🏨 プランを5つ生成する", use_container_width=True, type="primary"):
         st.session_state.step = "final_plan"; st.rerun()
 
-# --- STEP 3: 最終プラン（エラーガード版） ---
+# --- STEP 3: 最終プラン (改行・タイトル・リンク修正済み) ---
 elif st.session_state.step == "final_plan":
     if not st.session_state.final_plans:
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
         for i, label in enumerate(["プランA", "プランB", "プランC", "プランD", "プランE"]):
-            status_text.text(f"【{label}】を召喚中...")
+            status_text.text(f"【{label}】を構築中...")
             try:
-                # 8bモデルで安定性を確保
-                prompt = f"""一流コンシェルジュとして{st.session_state.form_data['days']}日間の旅程を作成せよ。
+                plan_prompt = f"""
+                一流コンシェルジュとして、{st.session_state.form_data['days']}日間の旅程を以下の形式で作成せよ。
                 1. 冒頭に <div class='chuuni-title'>旅のタイトル（厨二病風）</div>
-                2. 各行動は <div class='timeline-item'> で囲む。
-                3. 時間表記は独立：<span class='time-range'>09:00 - 10:00</span>
-                4. [スポット名](https://www.google.com/search?q=スポット名) 形式を厳守。
-                5. 最後に <div class='ai-recommend-box'>AIおすすめ情報</div>
-                選択スポット：{', '.join(st.session_state.selected_spots)}"""
-                
-                res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
+                2. 各行動は必ず <div class='timeline-item'> で囲む。
+                3. 時間表記は独立した行：<span class='time-range'>09:00 - 10:00</span>
+                4. スポット名は [名称](https://www.google.com/search?q=名称) 形式のみ。
+                5. 最後に <div class='ai-recommend-box'>AIおすすめ情報</div> を緑背景で。
+                選択されたスポット：{', '.join(st.session_state.selected_spots)}
+                住所情報：{st.session_state.form_data['dest']}
+                """
+                res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": plan_prompt}])
                 st.session_state.final_plans[label] = res.choices[0].message.content
                 progress_bar.progress((i + 1) / 5)
                 time.sleep(1.0)
-            except Exception as e:
-                st.warning(f"{label}の生成に失敗しました。")
-                continue # 次のプランへ
+            except:
+                continue
         status_text.empty()
 
-    # プランが一つでもあればタブを表示、なければ警告
     if st.session_state.final_plans:
         tabs = st.tabs(list(st.session_state.final_plans.keys()))
         for label, tab in zip(st.session_state.final_plans.keys(), tabs):
             with tab:
                 st.markdown(st.session_state.final_plans[label], unsafe_allow_html=True)
     else:
-        st.error("プランの生成に失敗しました。一度ホームに戻り、時間をおいてお試しください。")
-        if st.button("ホームに戻る"): st.session_state.step = "input"; st.rerun()
+        st.error("プラン生成に失敗しました。時間をおいて再読み込みしてください。")
+        if st.button("ホームへ"): st.session_state.step = "input"; st.rerun()
 
 st.markdown('<div class="footer">2025-2026 / AIPIA</div>', unsafe_allow_html=True)
