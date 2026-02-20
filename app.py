@@ -143,4 +143,12 @@ elif st.session_state.step == "final_plan":
 # --- STEP 4: 印刷画面 ---
 elif st.session_state.step == "print_ready":
     st.markdown("## 🖨 旅のしおり（確定プラン）")
-    st.markdown(f'<div style="background:white; padding:
+    st.markdown(f'<div style="background:white; padding:40px; border:1px solid #000;">{st.session_state.confirmed_plan}</div>', unsafe_allow_html=True)
+    
+    # 印刷ボタン（ブラウザの印刷機能を呼び出す）
+    st.markdown('<button onclick="window.print()" class="no-print" style="width:100%; padding:10px; background:#111; color:white; border:none; border-radius:5px; cursor:pointer;">PDFを保存 / 印刷する</button>', unsafe_allow_html=True)
+    
+    if st.button("最初に戻る"):
+        st.session_state.step = "input"
+        st.session_state.final_plans = {}
+        st.rerun()
