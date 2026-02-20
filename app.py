@@ -8,7 +8,7 @@ import time
 st.set_page_config(layout="wide", page_title="Aipia - Executive Concierge")
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 47都道府県リスト（先頭に空欄を追加）
+# 47都道府県リスト（先頭は空欄）
 PREFECTURES = [""] + [
     "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
     "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
@@ -57,14 +57,13 @@ if st.session_state.step == "input":
     with c1:
         dep = st.text_input("🛫 出発地", value="新宿駅")
     with c2:
-        # 都道府県を空欄スタートに修正
         pref = st.selectbox("📍 目的地（都道府県）", PREFECTURES, index=0)
     with c3:
-        city = st.text_input("🏠 市区町村・エリア", placeholder="例：松本市、奥多摩町など")
+        city = st.text_input("🏠 市区町村・エリア", placeholder="例：松本市、十津川村など")
 
     c4, c5 = st.columns([1, 2])
     with c4:
-        keyword = st.text_input("🔍 キーワード", placeholder="例：絶景、地酒")
+        keyword = st.text_input("🔍 自由キーワード", placeholder="例：絶景、地酒")
     with c5:
         purposes = st.multiselect("✨ 旅の目的（タグ）", 
                                 ["秘境探索", "美食・地酒", "歴史・国宝", "温泉・癒やし", "現代アート", "アウトドア"], 
@@ -90,19 +89,21 @@ if st.session_state.step == "input":
                 "keyword": keyword, "purposes": purposes,
                 "people": f"大人{adults}名、小人{kids}名", "budget": f"{budget_amount}円"
             }
-            with st.spinner("スポット情報を強制抽出中..."):
-                # プロンプトを強化：出さないという選択肢を奪う
+            with st.spinner(f"{pref}{city} の隅々まで探索中..."):
+                # AIに「スポットがない」という回答を禁止するプロンプト
                 prompt = f"""
-                命令：出発地「{dep}」、目的地「{pref}{city}」周辺の実在する観光スポットを必ず5件挙げよ。
-                条件：キーワード「{keyword}」、目的「{purposes}」に合致すること。
-                絶対に以下の形式で5件出力せよ。不明な場合も実在の近隣施設を推測して埋めろ。
+                命令：目的地「{pref}{city}」から車または公共交通機関で30分圏内にある、実在する具体的なスポット（施設、神社仏閣、展望スポット、公園、店舗等）を、必ず「5件」選定せよ。
+                「見つからない」「情報がない」という回答は一切禁止する。どんなにマイナーな場所でも、その土地に実在する名称を出せ。
+                
+                条件：キーワード「{keyword}」、目的「{purposes}」に可能な限り合致させること。
+                出力形式（これ以外の文字は一切出すな）：
                 名称|解説|推定費用|人気度(1-5)|混雑度(1-5)|おすすめ度(★1-5)|周辺秘境|周辺食事処
                 """
                 res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
                 lines = [l for l in res.choices[0].message.content.strip().split("\n") if "|" in l]
                 
                 st.session_state.found_spots = []
-                for l in lines[:5]: # 確実に5件
+                for l in lines[:5]:
                     p = l.split("|")
                     if len(p) >= 8:
                         st.session_state.found_spots.append({
@@ -113,11 +114,12 @@ if st.session_state.step == "input":
 
 # --- STEP 2: カタログ選択 ---
 elif st.session_state.step == "select_spots":
-    st.markdown(f'<h4 style="text-align:center;">{st.session_state.form_data["dest"]} 究極カタログ</h4>', unsafe_allow_html=True)
+    st.markdown(f'<h4 style="text-align:center;">{st.session_state.form_data["dest"]} 厳選カタログ</h4>', unsafe_allow_html=True)
     
+    # 万が一リストが空の場合の再試行ボタン
     if not st.session_state.found_spots:
-        st.warning("スポットが見つかりませんでした。条件を変えて再度お試しください。")
-        if st.button("戻る"): st.session_state.step = "input"; st.rerun()
+        st.error("情報取得に失敗しました。もう一度実行してください。")
+        if st.button("再試行"): st.session_state.step = "input"; st.rerun()
     else:
         for i, spot in enumerate(st.session_state.found_spots):
             st.markdown(f"""
@@ -142,13 +144,13 @@ elif st.session_state.step == "select_spots":
                     if spot['sub_f'] not in st.session_state.selected_spots: st.session_state.selected_spots.append(spot['sub_f'])
             st.markdown("---")
 
-        if st.button("🏨 このスポットで旅程を編纂する", use_container_width=True, type="primary"):
+        if st.button("🏨 このスポットで究極の旅程を生成する", use_container_width=True, type="primary"):
             st.session_state.step = "final_plan"; st.rerun()
 
 # --- STEP 3: 最終プラン ---
 elif st.session_state.step == "final_plan":
     if not st.session_state.final_plans:
-        with st.spinner("極上の旅程を構築中..."):
+        with st.spinner("神話のごとき旅程を編纂中..."):
             for label in ["Plan A", "Plan B", "Plan C", "Plan D", "Plan E"]:
                 try:
                     p_prompt = f"""
@@ -157,7 +159,7 @@ elif st.session_state.step == "final_plan":
                     1. 冒頭に <div class='chuuni-title'>旅のタイトル（厨二病風）</div>
                     2. 各行動は <div class='timeline-item'> で囲む。
                     3. 時間は独立行：<span class='time-range'>09:00 - 10:00</span>
-                    4. [名称](https://www.google.com/search?q=名称) 形式。
+                    4. スポット名は [名称](https://www.google.com/search?q=名称) 形式。
                     採用スポット：{', '.join(st.session_state.selected_spots)}
                     """
                     res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": p_prompt}])
