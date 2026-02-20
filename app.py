@@ -7,7 +7,7 @@ import re
 st.set_page_config(layout="wide", page_title="Aipia")
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 2. デザイン (CSS)
+# 2. デザイン (CSS) - 画像のUIに寄せる
 st.markdown("""
     <style>
     .stApp { background-color: #FCF9F2; }
@@ -23,7 +23,11 @@ st.markdown("""
         background-color: white; padding: 25px; border-radius: 15px;
         margin-bottom: 25px; border: 1px solid #eee; box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }
-    .spot-title { font-size: 24px; font-weight: bold; color: #111; margin-bottom: 8px; }
+    .plan-container {
+        background-color: white; border-radius: 20px; padding: 40px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #ddd;
+        white-space: pre-wrap; font-size: 16px; line-height: 1.8;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -33,14 +37,13 @@ if "parsed_spots" not in st.session_state: st.session_state.parsed_spots = []
 if "selected_names" not in st.session_state: st.session_state.selected_names = []
 if "final_plans" not in st.session_state: st.session_state.final_plans = {}
 
-# --- ヘッダー ---
 st.markdown('<div class="black-banner"><p class="aipia-logo">Aipia</p></div>', unsafe_allow_html=True)
 
 # --- STEP 1: 入力 ---
 if st.session_state.step == "input":
     st.markdown("### 1. 旅行の条件を入力してください")
     col1, col2, col3 = st.columns(3)
-    with col1: departure = st.text_input("🛫 出発地 (必須)", key="dep")
+    with col1: departure = st.text_input("🛫 出発地 (必須)", key="dep", placeholder="例：東京駅")
     with col2: destination = st.text_input("📍 目的地", placeholder="長野、徳島など", key="dest")
     with col3: budget = st.text_input("💰 予算/人 (必須)", placeholder="10万円など", key="bud")
 
@@ -63,13 +66,14 @@ if st.session_state.step == "input":
                 "dates": f"{date_range[0]}〜{date_range[1]}", "hotel": f"{hotel_style}({room_pref})"
             }
             with st.spinner("秘境をリサーチ中..."):
-                # AIにスポットを箇条書きで出させる
                 target = destination if destination else "日本の秘境"
-                prompt = f"{target}周辺の観光スポットを8つ教えてください。名称と解説を100文字程度で。「名称：」「解説：」という言葉を必ず使ってください。"
+                # 不用な言語や記号を混ぜないよう指示を強化
+                prompt = f"{target}周辺の観光スポットを8つ教えてください。日本語のみを使用し、記号「や」を文頭に付けないでください。各スポットを「名称：」「解説：」の形式で出力してください。"
                 res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
                 
-                # 抽出ロジックの改善：正規表現で「名称：」から始まるブロックをすべて見つける
                 raw_text = res.choices[0].message.content
+                # 抽出ロジックの改善（不要な記号を除去）
+                raw_text = re.sub(r'[」」「]', '', raw_text) 
                 found_spots = re.findall(r"(名称[:：].*?)(?=名称[:：]|$)", raw_text, re.DOTALL)
                 
                 if found_spots:
@@ -77,73 +81,71 @@ if st.session_state.step == "input":
                     st.session_state.step = "select_spots"
                     st.rerun()
                 else:
-                    st.error("スポットが見つかりませんでした。目的地を変えて試してください。")
+                    st.error("スポットが見つかりませんでした。")
         else:
             st.error("必須項目を入力してください。")
 
-# --- STEP 2: スポット選択（確実に表示） ---
+# --- STEP 2: スポット選択 ---
 elif st.session_state.step == "select_spots":
     st.markdown("## SPOT DISCOVERY")
-    st.markdown("行きたいスポットにチェックを入れてください。")
-    
     for i, spot_text in enumerate(st.session_state.parsed_spots):
-        # 名前と解説をパース
         name_match = re.search(r"名称[:：]\s*(.*)", spot_text)
-        name = name_match.group(1).split('\n')[0].strip() if name_match else f"おすすめスポット {i+1}"
-        
+        name = name_match.group(1).split('\n')[0].strip() if name_match else f"スポット {i+1}"
         desc_match = re.search(r"解説[:：]\s*(.*)", spot_text, re.DOTALL)
         desc = desc_match.group(1).strip() if desc_match else spot_text
 
         st.markdown(f'<div class="spot-card">', unsafe_allow_html=True)
         c1, c2 = st.columns([1, 2])
-        with c1:
-            st.image(f"https://picsum.photos/seed/{name}/400/300", use_container_width=True)
+        with c1: st.image(f"https://picsum.photos/seed/{name}/400/300", use_container_width=True)
         with c2:
-            st.markdown(f'<p class="spot-title">{name}</p>', unsafe_allow_html=True)
+            st.markdown(f'### {name}')
             st.write(desc)
-            if st.checkbox(f"この場所を候補に入れる", key=f"sel_{i}"):
-                if name not in st.session_state.selected_names:
-                    st.session_state.selected_names.append(name)
+            if st.checkbox(f"候補に入れる", key=f"sel_{i}"):
+                if name not in st.session_state.selected_names: st.session_state.selected_names.append(name)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.button("🚀 プランを生成する", use_container_width=True, type="primary"):
+    if st.button("🚀 5つのプランを生成する", use_container_width=True, type="primary"):
         if st.session_state.selected_names:
             st.session_state.step = "final_plan"
             st.rerun()
         else:
             st.error("スポットを1つ以上選んでください。")
 
-# --- STEP 3: 最終プラン（詳細版） ---
+# --- STEP 3: 最終プラン（A〜E 5つ） ---
 elif st.session_state.step == "final_plan":
     if not st.session_state.final_plans:
-        with st.spinner("詳細な旅程を算出中..."):
+        with st.spinner("予算内で帰宅までの行程を5パターン計算中..."):
             f = st.session_state.form_data
-            for p_label in ["プランA", "プランB"]:
+            for label in ["プランA", "プランB", "プランC", "プランD", "プランE"]:
                 prompt = f"""
-                出発地:{f['departure']}、目的地:{f['destination']}、日程:{f['dates']}。
-                大人{f['adults']}名、子供{f['kids']}名、予算{f['budget']}。歩行:{f['speed']}。
-                宿泊要望:{f['hotel']}。
-                選択したスポット:{st.session_state.selected_names}。
-                
-                【指示】
-                - 出発から到着まで、分刻みのタイムラインを作成。
-                - 各スポットの滞在時間、移動手段（路線名・徒歩）、各工程の金額を明記。
-                - 【Aipiaのおすすめ！】として、未選択の秘境を1つ追加。
-                - 最後に交通費・宿泊費・入場料の「合計金額」を算出。
+                あなたはプロの旅行コンシェルジュです。以下の条件で日本語の旅行プランを作成してください。
+                出発地: {f['departure']}
+                目的地: {f['destination']}
+                日程: {f['dates']}
+                予算: 1人あたり {f['budget']} 以内で完結（交通費・宿泊費・食費・入場料込）
+                人数: 大人{f['adults']}名, 子供{f['kids']}名
+                歩行速度: {f['speed']}
+                選択スポット: {st.session_state.selected_names}
+
+                【厳守事項】
+                1. 行程は「{f['departure']}」を出発し、最終日に「{f['departure']}」へ帰宅するまでを分刻みで書くこと。
+                2. 具体的な列車名、路線名、移動時間を記載すること。
+                3. 各工程の予想金額を出し、最後に「合計金額」が予算内であることを示すこと。
+                4. 「【Aipiaのおすすめ！】」として、選択されていない秘境スポットを1つ追加すること。
+                5. 謎の記号や他言語を混ぜず、読みやすい日本語で出力すること。
                 """
                 res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
-                st.session_state.final_plans[p_label] = res.choices[0].message.content
+                st.session_state.final_plans[label] = res.choices[0].message.content
 
-    col_left, col_right = st.columns([3, 1])
-    with col_left:
-        selected_p = st.tabs(list(st.session_state.final_plans.keys()))
-        for i, tab in enumerate(selected_p):
-            with tab:
-                st.markdown(f"### {list(st.session_state.final_plans.keys())[i]} 詳細行程")
-                st.write(st.session_state.final_plans[list(st.session_state.final_plans.keys())[i]])
-    with col_right:
-        st.info(f"予算: {f['budget']}\n\n人数: {f['adults'] + f['kids']}名")
-        if st.button("やり直す"):
-            st.session_state.step = "input"
-            st.session_state.final_plans = {}
-            st.rerun()
+    # タブでプラン切り替え
+    tabs = st.tabs(list(st.session_state.final_plans.keys()))
+    for i, tab in enumerate(tabs):
+        label = list(st.session_state.final_plans.keys())[i]
+        with tab:
+            st.markdown(f"### 📍 {label} 詳細スケジュール")
+            st.markdown(f'<div class="plan-container">{st.session_state.final_plans[label]}</div>', unsafe_allow_html=True)
+
+    if st.button("最初に戻る"):
+        st.session_state.step = "input"
+        st.session_state.final_plans = {}
+        st.rerun()
