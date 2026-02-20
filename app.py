@@ -8,6 +8,44 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 st.title("Aipia")
 st.caption("-AIが創る、秘境への旅行プラン-")
 
+# デザインを画像に寄せるためのカスタム設定
+st.markdown("""
+    <style>
+    /* 背景を画像っぽく（レモンや夕焼けの代わりにグラデーション） */
+    .stApp {
+        background: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), 
+                    url('https://www.transparenttextures.com/patterns/white-diamond.png');
+        background-color: #fffbeb; /* ほんのり黄色（レモン意識） */
+    }
+    
+    /* 検索バーやカードのスタイル */
+    .stTextInput > div > div > input {
+        border-radius: 25px;
+        border: 2px solid #000033;
+    }
+    
+    /* プランを表示する箱をカード風に */
+    .stChatMessage {
+        background-color: white !important;
+        border-radius: 15px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+        border: 1px solid #e2e8f0 !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* タイトルのフォントをロゴに寄せる */
+    .title-font {
+        font-family: 'Arial Black', sans-serif;
+        font-size: 50px;
+        color: #000033;
+        text-align: center;
+        margin-bottom: 0px;
+    }
+    </style>
+    <p class="title-font">Aipia</p>
+    <p style="text-align: center; color: #666;">-AIが創る、秘境への旅行プラン-</p>
+    """, unsafe_allow_html=True)
+
 # --- ここが「SYSTEM_PROMPT」です！ ---
 SYSTEM_PROMPT = """
 あなたは「Aipia（アイピア） -AIが創る、秘境への旅行プラン-」の専属AIコンシェルジュです。
