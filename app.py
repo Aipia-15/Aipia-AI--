@@ -8,34 +8,62 @@ st.set_page_config(layout="wide", page_title="Aipia - AI Travel Planner")
 # 2. クライアント設定
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 3. デザイン (CSS)
+# 3. デザイン (CSS) - 文字サイズを大幅に強化
 st.markdown("""
     <style>
+    /* 全体のベース文字サイズを大きく */
+    html, body, [class*="css"] {
+        font-size: 20px; 
+    }
     .stApp { background-color: #FCF9F2; }
-    .logo-container { text-align: center; padding: 50px 0 30px 0; }
     
-    /* タイトル：Aipiaをさらに大きく */
+    .logo-container { text-align: center; padding: 60px 0 40px 0; }
+    
+    /* Aipiaロゴ：圧倒的な存在感 */
     .aipia-logo { 
         font-family: 'Georgia', serif; font-style: italic; 
-        font-size: 120px; font-weight: bold; color: #111; 
-        margin-bottom: -20px; line-height: 1;
+        font-size: 150px; font-weight: bold; color: #111; 
+        margin-bottom: -10px; line-height: 1;
     }
-    /* サブタイトル：上より小さく、洗練されたフォント */
+    /* サブタイトル：読みやすく、かつロゴを邪魔しないサイズ */
     .sub-title { 
-        font-size: 18px; color: #666; font-weight: bold; 
-        letter-spacing: 5px; margin-top: 0px; 
+        font-size: 28px; color: #555; font-weight: bold; 
+        letter-spacing: 8px; margin-top: 10px; 
     }
     
-    .spot-card { background-color: white; padding: 25px; border-radius: 20px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 30px; }
-    .status-box { background-color: #f8fafc; padding: 12px; border-radius: 12px; font-size: 14px; color: #475569; margin-top: 15px; display: flex; justify-content: space-around; border: 1px solid #e2e8f0; }
-    .plan-card { background-color: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); white-space: pre-wrap; }
+    /* スポットカード */
+    .spot-card { 
+        background-color: white; padding: 40px; border-radius: 30px; 
+        border: 1px solid #eee; box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
+        margin-bottom: 50px; 
+    }
+    .spot-title { font-size: 42px; font-weight: bold; color: #111; margin-bottom: 20px; }
+    .spot-desc { font-size: 24px; line-height: 1.6; color: #333; }
+    
+    /* ステータスボックスの文字も大きく */
+    .status-box { 
+        background-color: #f0f4f8; padding: 20px; border-radius: 20px; 
+        font-size: 22px; font-weight: bold; color: #2d3748; 
+        margin-top: 25px; display: flex; justify-content: space-around; 
+    }
+    
+    /* プラン表示 */
+    .plan-card { 
+        background-color: white; padding: 40px; border-radius: 30px; 
+        font-size: 24px; line-height: 1.8; white-space: pre-wrap;
+    }
+    
+    /* 入力ラベルのサイズ */
+    .stTextInput label, .stSelectbox label, .stSlider label {
+        font-size: 24px !important; font-weight: bold !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 if "step" not in st.session_state: st.session_state.step = "input"
 if "parsed_spots" not in st.session_state: st.session_state.parsed_spots = []
 
-# --- ヘッダー（サイズ調整済み） ---
+# --- ヘッダー ---
 st.markdown("""
     <div class="logo-container">
         <p class="aipia-logo">Aipia</p>
@@ -45,10 +73,11 @@ st.markdown("""
 
 # --- STEP 1: 入力画面 ---
 if st.session_state.step == "input":
+    st.markdown("### 🔍 旅の条件を入力してください")
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1: departure = st.text_input("🛫 出発地", value="東京")
     with col2: destination = st.text_input("📍 目的地", placeholder="例：松本市、祖谷...")
-    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：城下町、隠れ家、サウナ...")
+    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：城下町、隠れ家...")
 
     col4, col5, col6, col7 = st.columns([2, 1, 1, 2])
     with col4: date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now()))
@@ -56,6 +85,7 @@ if st.session_state.step == "input":
     with col6: kids = st.number_input("子ども", min_value=0, value=0)
     with col7: walking_speed = st.select_slider("🚶 歩くスピード", options=["ゆっくり", "標準", "せっかち"], value="標準")
 
+    st.markdown("---")
     st.write("### 🏨 宿泊・お部屋の希望")
     c_h1, c_h2, c_h3 = st.columns(3)
     with c_h1: 
@@ -67,26 +97,25 @@ if st.session_state.step == "input":
     with c_h3:
         barrier_free = st.multiselect("安心・バリアフリー", ["バリアフリー対応", "車椅子利用", "段差が少ない"])
 
-    # 「歴史」テーマを追加
     tags = st.multiselect("🏝 旅のテーマ", ["絶景", "秘境", "歴史", "温泉", "郷土料理", "アクティビティ", "サウナ"], default=["絶景", "歴史"])
     budget_input = st.text_input("💰 予算（1人あたり）", placeholder="例：10万円")
 
-    if st.button("✨ この条件でスポットを探す", use_container_width=True, type="primary"):
-        with st.spinner("『場所』にこだわって検索中..."):
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("✨ この条件でスポットを探す（開業！）", use_container_width=True, type="primary"):
+        with st.spinner("極上のスポットを厳選中..."):
             st.session_state.form_data = {
                 "adults": adults, "kids": kids, "budget": budget_input, 
                 "speed": walking_speed, "hotel": hotel_type, "room_size": room_size_pref,
                 "room_type": room_type, "special": special_req, "barrier": barrier_free, "tags": tags
             }
             target = destination if destination else keyword
-            # プロンプトをさらに厳格化：ビジターセンターや案内所を禁止
-            prompt = f"""{target}周辺で、テーマ『{tags}』に沿った具体的な観光スポットを10件提案してください。
-            【禁止事項】: 県名・市名のみの名称、ビジターセンター、観光案内所、道の駅。
-            【必須事項】: 実際に観光客が体験・感動できる『具体的な場所名（寺社、展望台、古民家、店舗など）』を挙げてください。
+            prompt = f"""{target}周辺で、テーマ『{tags}』に沿った具体的な観光スポット（建物、公園、店舗、自然景勝地など）を10件提案してください。
+            【禁止】: 県名・市名のみ、ビジターセンター、道の駅、広域エリア名。
+            【必須】: 地図でピンが刺さる具体的な名称。
             
             形式：
             名称: (具体的なスポット名)
-            解説: (その場所の見どころ、100文字程度)
+            解説: (その場所の魅力、120文字程度)
             予算: (目安)
             おすすめ度: (★5つ中)
             混雑度: (低・中・高)
@@ -97,9 +126,9 @@ if st.session_state.step == "input":
             st.session_state.step = "select_spots"
             st.rerun()
 
-# --- STEP 2: お気に入り選択（以下省略なし） ---
+# --- STEP 2: お気に入り選択 ---
 elif st.session_state.step == "select_spots":
-    st.subheader("🏝 気になるスポットをお気に入り登録")
+    st.markdown("## 🏝 気になるスポットをお気に入り登録")
     selected_names = []
     for i, spot_data in enumerate(st.session_state.parsed_spots):
         details = {}
@@ -109,17 +138,26 @@ elif st.session_state.step == "select_spots":
                 details[k.strip()] = v.strip()
         name = details.get("名称", f"スポット {i+1}")
         
-        st.markdown('<div class="spot-card">', unsafe_allow_html=True)
-        col_main, col_fav = st.columns([9, 1])
+        st.markdown(f'<div class="spot-card">', unsafe_allow_html=True)
+        col_main, col_fav = st.columns([8, 2])
         with col_fav:
-            if st.checkbox("⭐", key=f"fav_{i}"): selected_names.append(name)
+            # チェックボックスも大きく
+            if st.checkbox("お気に入り登録 ⭐", key=f"fav_{i}"): 
+                selected_names.append(name)
         with col_main:
-            c_img, c_txt = st.columns([1, 2])
-            with c_img: st.image(f"https://picsum.photos/seed/aipia_v4_{i}/600/400", use_container_width=True)
+            c_img, c_txt = st.columns([1, 1.5])
+            with c_img: 
+                st.image(f"https://picsum.photos/seed/aipia_final_{i}/800/600", use_container_width=True)
             with c_txt:
-                st.markdown(f"### {name}")
-                st.write(details.get("解説", "情報取得中..."))
-                st.markdown(f'<div class="status-box"><span>💰 {details.get("予算", "不明")}</span><span>✨ {details.get("おすすめ度", "不明")}</span><span>👥 混雑: {details.get("混雑度", "不明")}</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<p class="spot-title">{name}</p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="spot-desc">{details.get("解説", "")}</p>', unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="status-box">
+                        <span>💰 {details.get("予算", "不明")}</span>
+                        <span>✨ {details.get("おすすめ度", "不明")}</span>
+                        <span>👥 混雑: {details.get("混雑度", "不明")}</span>
+                    </div>
+                """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     if st.button("🚀 選択したスポットでプランを作る", use_container_width=True, type="primary"):
@@ -131,19 +169,19 @@ elif st.session_state.step == "select_spots":
 
 # --- STEP 3: 最終プラン ---
 elif st.session_state.step == "final_plan":
-    st.subheader("🗓 あなただけの特別プラン")
+    st.markdown("## 🗓 あなただけの特別プラン")
     f = st.session_state.form_data
-    with st.spinner("詳細な移動スケジュールを計算中..."):
-        prompt = f"""以下の条件で5種類の旅行プランを作成してください。
+    with st.spinner("AIが最高の旅程を書き上げています..."):
+        prompt = f"""以下の条件で、毛色の違う5種類の旅行プランを作成してください。
         【基本】大人{f['adults']}名、子供{f['kids']}名、予算{f['budget']}
-        【移動】歩行速度は「{f['speed']}」。
+        【移動速度】{f['speed']}（これに合わせて徒歩移動時間を計算）
         【宿泊】{f['hotel']}、広さ「{f['room_size']}」、{f['room_type']}、{f['special']}、{f['barrier']}を考慮。
         【選択スポット】{st.session_state.selected_names}
-        ルール：食事処には[右上におすすめ！]、最後に予約URL。
+        ルール：食事処には[右上におすすめ！]、最後に各所のURLリンクを明記。
         """
         res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
         st.markdown(f'<div class="plan-card">{res.choices[0].message.content}</div>', unsafe_allow_html=True)
 
-    if st.button("← 最初からやり直す"):
+    if st.button("← 条件を変えてやり直す", use_container_width=True):
         st.session_state.step = "input"
         st.rerun()
