@@ -43,49 +43,51 @@ if "step" not in st.session_state: st.session_state.step = "input"
 if "selected_spots" not in st.session_state: st.session_state.selected_spots = []
 if "final_plans" not in st.session_state: st.session_state.final_plans = {}
 
-# ロゴ（ホーム復帰用）
+# ロゴ
 if st.session_state.step != "input":
-    if st.button("← 検索をやり直す"):
-        st.session_state.step = "input"; st.session_state.final_plans = {}; st.rerun()
+    if st.button("← 条件をやり直す"):
+        st.session_state.clear()
+        st.session_state.step = "input"; st.rerun()
 
 st.markdown('<div class="header-container"><p class="aipia-logo">Aipia</p><p class="aipia-sub">- AIが創る、秘境への旅行プラン -</p></div>', unsafe_allow_html=True)
 
-# --- STEP 1: 入力 (予算・人数・目的タグの完全反映) ---
+# --- STEP 1: 入力 (出発地を最上段に復元) ---
 if st.session_state.step == "input":
     st.markdown('<h3 style="text-align:center;">01. Travel Profile</h3>', unsafe_allow_html=True)
     
-    # 段組み1: 目的地とキーワード
+    # 1段目：移動の基本情報
     c1, c2, c3 = st.columns(3)
     with c1:
-        pref = st.selectbox("📍 都道府県", list(CITY_MAP.keys()) + ["その他..."])
+        dep = st.text_input("🛫 出発地", value="新宿駅") # 出発地を復活
     with c2:
-        city_options = CITY_MAP.get(pref, DEFAULT_CITIES)
-        city = st.selectbox("市町村エリア", city_options)
+        pref = st.selectbox("📍 目的地（都道府県）", list(CITY_MAP.keys()) + ["その他..."], index=1) # デフォルト長野
     with c3:
-        keyword = st.text_input("🔍 自由キーワード", placeholder="例：絶景、隠れ家、ジビエ")
+        city_options = CITY_MAP.get(pref, DEFAULT_CITIES)
+        city = st.selectbox("市区町村エリア", city_options)
 
-    # 段組み2: 目的タグと日程
-    c4, c5 = st.columns([2, 1])
+    # 2段目：キーワードと目的タグ
+    c4, c5 = st.columns([1, 2])
     with c4:
-        # 復活：旅の目的タグ
-        purposes = st.multiselect("✨ 旅の目的（タグ選択）", 
-                                ["秘境探索", "美食・地酒", "歴史・国宝", "温泉・癒やし", "現代アート", "アクティビティ", "写真映え"], 
-                                default=["秘境探索"])
+        keyword = st.text_input("🔍 キーワード検索", placeholder="例：滝、ジビエ、隠れ家")
     with c5:
-        date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now() + timedelta(days=2)))
+        purposes = st.multiselect("✨ 旅の目的（タグ）", 
+                                ["秘境探索", "美食・地酒", "歴史・国宝", "温泉・癒やし", "現代アート", "アクティビティ"], 
+                                default=["秘境探索"])
 
-    # 段組み3: 人数（大人・小人）と予算
-    c6, c7, c8 = st.columns(3)
+    # 3段目：日程・人数・予算
+    c6, c7, c8, c9 = st.columns([1.5, 1, 1, 1.5])
     with c6:
-        adults = st.number_input("大人 (中学生以上)", 1, 20, 2)
+        date_range = st.date_input("📅 日程", value=(datetime.now(), datetime.now() + timedelta(days=2)))
     with c7:
-        kids = st.number_input("小人 (小学生以下)", 0, 20, 0)
+        adults = st.number_input("大人", 1, 20, 2)
     with c8:
-        # 曖昧にしない予算入力
+        kids = st.number_input("小人", 0, 20, 0)
+    with c9:
         budget_amount = st.number_input("💰 予算総額 (人/円)", min_value=5000, step=5000, value=50000)
 
     if st.button("⚜️ 秘境カタログを召喚する", use_container_width=True, type="primary"):
         st.session_state.form_data = {
+            "dep": dep,
             "dest": f"{pref}{city}",
             "days": (date_range[1]-date_range[0]).days + 1 if isinstance(date_range, tuple) and len(date_range)==2 else 1,
             "keyword": keyword,
@@ -95,9 +97,9 @@ if st.session_state.step == "input":
         }
         with st.spinner("周辺スポットを精査中..."):
             prompt = f"""
-            目的地「{pref}{city}」周辺で、「{keyword}」に関連し、目的「{purposes}」に合致する実在の施設を5件出せ。
-            予算「{budget_amount}円」と人数「大人{adults}名、小人{kids}名」を考慮した情報を付与せよ。
-            形式：名称|解説|推定費用(大人1人分)|人気度(1-5)|混雑度(1-5)|おすすめ度(★1-5)|周辺秘境|周辺食事処
+            出発地「{dep}」、目的地「{pref}{city}」周辺で、「{keyword}」に関連し、目的「{purposes}」に合う実在の施設を5件出せ。
+            予算「{budget_amount}円」、人数「大人{adults}名、小人{kids}名」を考慮せよ。
+            形式：名称|解説|推定費用|人気度(1-5)|混雑度(1-5)|おすすめ度(★1-5)|周辺秘境|周辺食事処
             """
             res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
             lines = res.choices[0].message.content.strip().split("\n")
@@ -112,8 +114,7 @@ if st.session_state.step == "input":
 # --- STEP 2: カタログ選択 ---
 elif st.session_state.step == "select_spots":
     st.markdown(f'<h4 style="text-align:center;">{st.session_state.form_data["dest"]} 厳選カタログ</h4>', unsafe_allow_html=True)
-    st.write(f"条件：{st.session_state.form_data['people']} / 予算：{st.session_state.form_data['budget']} / 目的：{', '.join(st.session_state.form_data['purposes'])}")
-
+    
     for i, spot in enumerate(st.session_state.found_spots):
         st.markdown(f"""
         <div class="catalog-card">
@@ -138,24 +139,24 @@ elif st.session_state.step == "select_spots":
                 if spot['sub_f'] not in st.session_state.selected_spots: st.session_state.selected_spots.append(spot['sub_f'])
         st.markdown("---")
 
-    if st.button("🏨 このメンバーと予算でプランを創る", use_container_width=True, type="primary"):
+    if st.button("🏨 究極の旅程を生成する", use_container_width=True, type="primary"):
         st.session_state.step = "final_plan"; st.rerun()
 
 # --- STEP 3: 最終プラン ---
 elif st.session_state.step == "final_plan":
     if not st.session_state.final_plans:
-        with st.spinner("最適な旅程を計算中..."):
+        with st.spinner("旅程を編纂中..."):
             for label in ["Plan A", "Plan B", "Plan C", "Plan D", "Plan E"]:
                 try:
                     p_prompt = f"""
                     一流コンシェルジュとして{st.session_state.form_data['days']}日間の旅程を作成せよ。
-                    人数は{st.session_state.form_data['people']}、一人当たり予算{st.session_state.form_data['budget']}。
+                    出発地：{st.session_state.form_data['dep']}
+                    構成：{st.session_state.form_data['people']}、予算：{st.session_state.form_data['budget']}
                     1. 冒頭に <div class='chuuni-title'>旅のタイトル（厨二病風）</div>
                     2. 各行動は <div class='timeline-item'> で囲む。
                     3. 時間は独立行：<span class='time-range'>09:00 - 10:00</span>
-                    4. スポット名は [名称](https://www.google.com/search?q=名称) 形式。
+                    4. [名称](https://www.google.com/search?q=名称) 形式。
                     採用スポット：{', '.join(st.session_state.selected_spots)}
-                    目的：{st.session_state.form_data['purposes']}を重視。
                     """
                     res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": p_prompt}])
                     st.session_state.final_plans[label] = res.choices[0].message.content
