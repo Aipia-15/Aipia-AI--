@@ -3,13 +3,14 @@ from groq import Groq
 from datetime import datetime, timedelta
 import urllib.parse
 
-# 1. ページ基本設定
+# 1. ページ設定とGroqクライアント（高精度モデル指定）
 st.set_page_config(layout="wide", page_title="Aipia - Executive Concierge")
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+MODEL = "llama-3.3-70b-specdec" # 質を落とさないための高推論モデル
 
 PREFECTURES = [""] + ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"]
 
-# CSSデザイン (初期の高級感を復元)
+# CSS定義
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
@@ -17,16 +18,15 @@ st.markdown("""
     .header-container { text-align: center; padding: 30px 0; border-bottom: 2px solid #D4AF37; background: #FFF; margin-bottom: 30px; }
     .aipia-logo { font-family: 'Playfair Display', serif; font-size: 3.5rem; color: #111; letter-spacing: 5px; margin: 0; }
     .aipia-sub { color: #D4AF37; font-weight: bold; letter-spacing: 3px; font-size: 0.9rem; margin-top: -10px; }
-    .spot-card { background: #FFF; border: 1px solid #E0D8C3; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .line-button { background-color: #06C755; color: white !important; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; text-align: center; }
-    .plan-row { background: white; padding: 15px; border-left: 5px solid #D4AF37; margin-bottom: 10px; border-radius: 5px; }
+    .spot-card { background: white; border-radius: 12px; padding: 20px; border: 1px solid #E0D8C3; margin-bottom: 20px; }
+    .line-button { background-color: #06C755; color: white !important; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; }
+    .day-header { background: #111; color: #D4AF37; padding: 5px 15px; border-radius: 5px; margin: 20px 0 10px; }
     </style>
 """, unsafe_allow_html=True)
 
 # セッション管理
 if "step" not in st.session_state: st.session_state.step = "input"
 if "found_spots" not in st.session_state: st.session_state.found_spots = []
-if "show_more" not in st.session_state: st.session_state.show_more = False
 if "selected_spots" not in st.session_state: st.session_state.selected_spots = []
 if "final_plans" not in st.session_state: st.session_state.final_plans = {}
 if "edit_mode" not in st.session_state: st.session_state.edit_mode = False
@@ -40,9 +40,9 @@ if st.session_state.step == "input":
     with c2: date_range = st.date_input("📅 旅行日程", value=(datetime.now(), datetime.now() + timedelta(days=1)))
     with c3: dep_time = st.time_input("🕔 出発時刻", value=datetime.strptime("08:00", "%H:%M").time())
 
-    c4, c5 = st.columns(2) # 都道府県・市区町村 横並び
+    c4, c5 = st.columns(2)
     with c4: pref = st.selectbox("📍 目的地（都道府県）", PREFECTURES)
-    with c5: city = st.text_input("🏠 市区町村・エリア詳細")
+    with c5: city = st.text_input("🏠 目的地（詳細エリア）")
 
     c6, c7, c8 = st.columns([1, 2, 1])
     with c6: keyword = st.text_input("🔍 キーワード")
@@ -55,65 +55,70 @@ if st.session_state.step == "input":
 
     if st.button("⚜️ 10個の厳選スポットをリサーチする", use_container_width=True, type="primary"):
         if not pref: st.error("都道府県を選んでください"); st.stop()
-        st.session_state.form_data = {"dep": dep_place, "dep_time": dep_time, "dest": f"{pref}{city}", "budget": budget, "adults": adults, "kids": kids}
+        days = (date_range[1] - date_range[0]).days + 1 if isinstance(date_range, tuple) and len(date_range) == 2 else 1
+        st.session_state.form_data = {"dep": dep_place, "dep_time": dep_time, "dest": f"{pref}{city}", "budget": budget, "days": days}
         
-        with st.spinner("実在する10件のスポットを解析中..."):
-            prompt = f"{pref}{city}周辺で、{keyword}に関連する「実在する」スポットを必ず10件、以下の形式で出せ。名称|説明(200字)|予算|バリアフリー|駐車場|実在住所"
-            res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
-            lines = [l.strip() for l in res.choices[0].message.content.split('\n') if '|' in l]
-            st.session_state.found_spots = [{"name": p[0], "desc": p[1], "fee": p[2], "bf": p[3], "park": p[4], "loc": p[5]} for p in [line.split('|') for line in lines] if len(p) >= 6][:10]
-            st.session_state.step = "select_spots"; st.rerun()
+        # 最初の10個取得
+        prompt = f"実在する{pref}{city}周辺の観光スポットを10件出せ。形式：名称|詳細説明|予算|バリアフリー|駐車場|住所"
+        res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+        st.session_state.found_spots = [l.split('|') for l in res.choices[0].message.content.split('\n') if '|' in l][:10]
+        st.session_state.step = "select_spots"; st.rerun()
 
-# --- STEP 2: スポットカタログ（10件・More機能） ---
+# --- STEP 2: スポットカタログ（Moreで10個ずつ追加） ---
 elif st.session_state.step == "select_spots":
-    st.markdown(f"### 📍 {st.session_state.form_data['dest']} の厳選カタログ")
+    st.markdown(f"### 📍 {st.session_state.form_data['dest']} スポットカタログ")
     
-    num_display = 10 if st.session_state.show_more else 5
-    for i in range(min(num_display, len(st.session_state.found_spots))):
-        spot = st.session_state.found_spots[i]
+    for i, s in enumerate(st.session_state.found_spots):
         with st.container():
-            c_img, c_txt = st.columns([1, 3])
-            c_img.image(f"https://source.unsplash.com/featured/?{urllib.parse.quote(spot['name'])}", use_column_width=True)
-            with c_txt:
-                st.markdown(f"#### {spot['name']} <small>(📍{spot['loc']})</small>", unsafe_allow_html=True)
-                st.write(spot['desc'])
-                st.markdown(f"💰 {spot['fee']} | ♿ {spot['bf']} | 🚗 {spot['park']}")
-                if st.checkbox("採用", key=f"s_{i}"): st.session_state.selected_spots.append(spot['name'])
+            col1, col2 = st.columns([1, 3])
+            col1.image(f"https://source.unsplash.com/featured/?{urllib.parse.quote(s[0])}", use_column_width=True)
+            with col2:
+                st.markdown(f"#### {s[0]} <small>({s[5]})</small>", unsafe_allow_html=True)
+                st.write(s[1]); st.markdown(f"💰 {s[2]} | ♿ {s[3]} | 🚗 {s[4]}")
+                if st.checkbox("採用", key=f"sel_{i}"):
+                    if s[0] not in st.session_state.selected_spots: st.session_state.selected_spots.append(s[0])
         st.divider()
 
-    if not st.session_state.show_more:
-        if st.button("More（さらに5つの候補を表示）"): st.session_state.show_more = True; st.rerun()
+    c_m1, c_m2 = st.columns(2)
+    with c_m1:
+        if st.button("➕ More（さらに10個リサーチ）", use_container_width=True):
+            prompt = f"実在する{st.session_state.form_data['dest']}周辺の、まだ挙げていないスポットをさらに10件出せ。形式：名称|詳細説明|予算|バリアフリー|駐車場|住所"
+            res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+            new_spots = [l.split('|') for l in res.choices[0].message.content.split('\n') if '|' in l][:10]
+            st.session_state.found_spots.extend(new_spots); st.rerun()
+    with c_m2:
+        if st.button("✅ プラン生成（5つ）", use_container_width=True, type="primary"):
+            st.session_state.step = "final_plan"; st.rerun()
 
-    if st.button("✅ 確定して5つのプランを作成", use_container_width=True, type="primary"):
-        st.session_state.step = "final_plan"; st.rerun()
-
-# --- STEP 3: 5つのプラン・編集・ホテル・LINE ---
+# --- STEP 3: 5つのプラン生成（2日目以降・ホテル死守） ---
 elif st.session_state.step == "final_plan":
     if not st.session_state.final_plans:
-        with st.spinner("ホテル宿泊を含む5つのプランを作成中..."):
+        with st.spinner(f"{st.session_state.form_data['days']}日間の全日程プランを5パターン作成中..."):
             for label in ["Plan A", "Plan B", "Plan C", "Plan D", "Plan E"]:
-                prompt = f"{st.session_state.form_data['dep']}発 {st.session_state.form_data['dep_time']}。宿泊(ホテル名)を必ずプラン内に含めろ。採用スポット：{st.session_state.selected_spots}。形式：時間|予定"
-                res = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
-                st.session_state.final_plans[label] = [{"time": l.split('|')[0], "act": l.split('|')[1]} for l in res.choices[0].message.content.split('\n') if '|' in l]
+                prompt = f"""
+                【重要】{st.session_state.form_data['days']}日間の旅程をすべて作成せよ。
+                出発：{st.session_state.form_data['dep']} {st.session_state.form_data['dep_time']}
+                採用スポット：{st.session_state.selected_spots}
+                条件：
+                1. 各日の日程を「1日目」「2日目」と明示して改行して書くこと。
+                2. 1日目の夜には、必ず{st.session_state.form_data['dest']}周辺の具体的な宿泊施設(ホテル名)を組み込むこと。
+                3. 形式は「時間 | 予定」とし、非常に細かく、読みやすく改行を入れること。
+                """
+                res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+                st.session_state.final_plans[label] = res.choices[0].message.content
 
-    chosen = st.radio("プラン選択", list(st.session_state.final_plans.keys()), horizontal=True)
+    chosen = st.radio("プラン切替", list(st.session_state.final_plans.keys()), horizontal=True)
 
     if not st.session_state.edit_mode:
-        for item in st.session_state.final_plans[chosen]:
-            st.markdown(f'<div class="plan-row"><b>{item["time"]}</b> : {item["act"]}</div>', unsafe_allow_html=True)
-        if st.button("✏️ このプランを編集する（時間をずらす・削る）"): st.session_state.edit_mode = True; st.rerun()
+        st.markdown(f"### {chosen}")
+        st.markdown(f'<div style="white-space: pre-wrap; background:white; padding:20px; border-radius:10px;">{st.session_state.final_plans[chosen]}</div>', unsafe_allow_html=True)
+        if st.button("✏️ 編集する"): st.session_state.edit_mode = True; st.rerun()
     else:
-        new_items = []
-        for i, item in enumerate(st.session_state.final_plans[chosen]):
-            c1, c2, c3 = st.columns([1, 4, 1])
-            t = c1.text_input("時間", item['time'], key=f"edit_t_{i}")
-            a = c2.text_input("予定", item['act'], key=f"edit_a_{i}")
-            if not c3.button("🗑️", key=f"edit_d_{i}"): new_items.append({"time": t, "act": a})
-        if st.button("💾 編集を保存"): st.session_state.final_plans[chosen] = new_items; st.session_state.edit_mode = False; st.rerun()
+        edited = st.text_area("内容を編集（2日目以降やホテルも自由に調整可能）", value=st.session_state.final_plans[chosen], height=600)
+        if st.button("💾 保存"): st.session_state.final_plans[chosen] = edited; st.session_state.edit_mode = False; st.rerun()
 
     st.divider()
-    # LINE共有 (改行を保持)
-    share_txt = f"【Aipia】旅行プラン - {chosen}\n" + "\n".join([f"{x['time']} {x['act']}" for x in st.session_state.final_plans[chosen]])
-    st.markdown(f'<a href="https://line.me/R/msg/text/?{urllib.parse.quote(share_txt)}" class="line-button">LINEで共有</a>', unsafe_allow_html=True)
+    share_txt = f"【Aipia】旅行プラン - {chosen}\n\n{st.session_state.final_plans[chosen]}"
+    st.markdown(f'<a href="https://line.me/R/msg/text/?{urllib.parse.quote(share_txt)}" class="line-button">LINEで全日程を共有</a>', unsafe_allow_html=True)
 
-    if st.button("🏠 ホームへ戻る"): st.session_state.clear(); st.session_state.step = "input"; st.rerun()
+    if st.button("🏠 最初に戻る"): st.session_state.clear(); st.session_state.step = "input"; st.rerun()
