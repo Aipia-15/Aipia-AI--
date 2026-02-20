@@ -95,10 +95,30 @@ if create_button:
         st.error("予算を入力してください！")
     else:
         with st.spinner("AIが秘境プランを練っています..."):
-            prompt = f"""
+            # プロンプトの組み立て
+            prompt_text = f"【出発地】: {departure}\n【目的地】: {destination}\n【日程】: {stay_info}\n【予算】: {budget}\n【テーマ】: {', '.join(tags)}"
+            
+            full_instruction = f"""
             以下の条件で最高の旅行プランを2つ提案してください。
-            【出発地】: {departure}
-            【目的地】: {destination}
-            【日程】: {stay_info}
-            【予算（正確な指定）】: {budget}
-            【重視するテーマ】: {', '.
+            {prompt_text}
+            
+            指示：
+            - 指定された予算（{budget}）内で収まるような、コストパフォーマンスを意識した提案にしてください。
+            - 必ず具体的な「秘境」スポットを1つ以上含めてください。
+            - 各日の行程は4〜5項目に絞ってください。
+            - 最後に「旅の総評」を短く添えてください。
+            """
+            
+            try:
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "system", "content": "あなたは一流の旅行プランナーです。"},
+                              {"role": "user", "content": full_instruction}]
+                )
+                
+                plan_result = response.choices[0].message.content
+                st.markdown(f'<div class="plan-card">{plan_result}</div>', unsafe_allow_html=True)
+                st.balloons()
+                
+            except Exception as e:
+                st.error(f"エラーが発生しました: {e}")
