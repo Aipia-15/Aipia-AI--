@@ -3,139 +3,119 @@ from groq import Groq
 from datetime import datetime, timedelta
 import urllib.parse
 
-# 1. 変数定義（NameErrorを回避）
+# --- 変数定義 ---
 PREFECTURES = [""] + ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"]
 
-# 2. ページ設定
-st.set_page_config(layout="wide", page_title="Aipia - Executive Concierge")
+# --- ページ設定 ---
+st.set_page_config(layout="wide", page_title="Aipia - Hotel & Route Plan")
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 MODEL = "llama-3.3-70b-versatile" 
 
-# デモ画面を再現するCSS
+# CSS: 視認性大幅向上（ホテルと移動を差別化）
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap');
-    .stApp { background-color: #F8F9FA; color: #333; font-family: 'Noto Serif JP', serif; }
-    .header-container { text-align: center; padding: 40px 0; background: #FFF; border-bottom: 3px solid #00695C; }
-    .aipia-logo { font-size: 3rem; font-weight: bold; color: #111; letter-spacing: 4px; margin: 0; }
-    .aipia-sub { color: #00695C; font-weight: bold; font-size: 1rem; margin-top: -5px; }
+    .stApp { background-color: #F4F7F6; font-family: 'Noto Serif JP', serif; }
+    .plan-container { max-width: 800px; margin: auto; }
     
-    /* タイムラインデザイン */
-    .timeline-container { padding: 20px; background: #FFF; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-    .day-label { background: #00695C; color: white; padding: 5px 15px; border-radius: 5px; font-weight: bold; display: inline-block; margin-bottom: 20px; }
-    .timeline-item { border-left: 2px solid #00695C; margin-left: 20px; padding-left: 30px; position: relative; padding-bottom: 25px; }
-    .timeline-dot { position: absolute; left: -7px; top: 5px; width: 12px; height: 12px; background: #00695C; border-radius: 50%; }
-    .time-badge { font-weight: bold; color: #00695C; font-size: 1.1rem; }
-    .plan-card { background: #F1F8E9; border-radius: 10px; padding: 15px; border: 1px solid #C8E6C9; margin-top: 5px; }
+    /* 日付ヘッダー */
+    .day-header { background: #1A237E; color: white; padding: 10px 20px; border-radius: 8px; margin-top: 30px; font-size: 1.2rem; }
     
-    /* 予算カード */
-    .budget-grid { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 20px; justify-content: space-around; }
-    .budget-card { background: #FFF; border-radius: 10px; padding: 15px; min-width: 120px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #00695C; }
-    .budget-val { font-weight: bold; font-size: 1.1rem; color: #00695C; display: block; }
+    /* 移動・道順のデザイン */
+    .route-step { border-left: 3px dashed #9E9E9E; margin-left: 30px; padding: 10px 20px; color: #616161; font-size: 0.9rem; position: relative; }
+    .route-step::before { content: '↓'; position: absolute; left: -11px; top: 0; background: #F4F7F6; }
+
+    /* 目的地のデザイン */
+    .spot-card { background: white; border-radius: 12px; padding: 20px; margin: 10px 0; border-left: 6px solid #00695C; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     
-    .link-btn { background: #00695C; color: white !important; padding: 4px 12px; border-radius: 15px; text-decoration: none; font-size: 0.75rem; font-weight: bold; display: inline-block; margin-top: 10px; }
-    .line-footer { background: #06C755; color: white !important; padding: 18px; border-radius: 12px; text-align: center; font-weight: bold; display: block; margin-top: 40px; text-decoration: none; font-size: 1.2rem; }
+    /* ホテルのデザイン（特別仕様） */
+    .hotel-card { background: #FFF9C4; border-radius: 12px; padding: 25px; margin: 15px 0; border: 2px solid #FBC02D; box-shadow: 0 6px 10px rgba(0,0,0,0.1); }
+    .hotel-label { background: #FBC02D; color: #333; font-weight: bold; padding: 2px 10px; border-radius: 4px; font-size: 0.8rem; }
+    
+    .price-tag { color: #D32F2F; font-weight: bold; float: right; }
+    .map-link { color: #1A237E; font-weight: bold; text-decoration: none; font-size: 0.85rem; border-bottom: 1px solid; }
     </style>
 """, unsafe_allow_html=True)
 
-# セッション管理
+# --- ロジック部 ---
 if "step" not in st.session_state: st.session_state.step = "input"
-if "found_spots" not in st.session_state: st.session_state.found_spots = []
-if "selected_spots" not in st.session_state: st.session_state.selected_spots = []
-if "final_plans" not in st.session_state: st.session_state.final_plans = {}
-if "edit_mode" not in st.session_state: st.session_state.edit_mode = False
 
-st.markdown('<div class="header-container"><p class="aipia-logo">Aipia</p><p class="aipia-sub">- AI Executive Concierge -</p></div>', unsafe_allow_html=True)
+st.title("⚜️ Aipia Luxury Travel Planner")
 
-# --- STEP 1: 入力 ---
 if st.session_state.step == "input":
-    c1, c2, c3 = st.columns([2, 2, 1])
-    with c1: dep = st.text_input("🛫 出発地点", "新宿駅")
-    with c2: dates = st.date_input("📅 旅行日程", [datetime.now(), datetime.now() + timedelta(days=1)])
-    with c3: dep_time = st.time_input("🕔 出発時刻", datetime.strptime("08:00", "%H:%M").time())
-    
-    c4, c5 = st.columns(2)
-    with c4: pref = st.selectbox("📍 都道府県", PREFECTURES)
-    with c5: city = st.text_input("🏠 詳細エリア")
-    
-    c6, c7, c8 = st.columns([1, 1, 1])
-    with c6: adults = st.number_input("大人", 1, 20, 2)
-    with c7: kids = st.number_input("小人", 0, 20, 0)
-    with c8: budget = st.number_input("予算/人", 5000, 500000, 50000)
-
-    if st.button("⚜️ 秘境スポットを10個リサーチする", use_container_width=True, type="primary"):
-        if not pref: st.error("都道府県を選択してください"); st.stop()
-        st.session_state.form_data = {"dep": dep, "dest": f"{pref}{city}", "days": 2, "budget": budget}
-        with st.spinner("実在する名所を10件厳選中..."):
-            prompt = f"{pref}{city}周辺の観光名所を10件挙げよ。形式：名称|詳細説明|予算目安|住所"
-            res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-            st.session_state.found_spots = [l.split('|') for l in res.choices[0].message.content.split('\n') if '|' in l][:10]
-            st.session_state.step = "select_spots"; st.rerun()
-
-# --- STEP 2: カタログ (10個 & More機能) ---
-elif st.session_state.step == "select_spots":
-    st.markdown(f"### 📍 {st.session_state.form_data['dest']} 厳選カタログ")
-    for i, s in enumerate(st.session_state.found_spots):
-        with st.container():
-            st.markdown(f"""<div class="plan-card"><b>{s[0]}</b><br><small>{s[3]}</small><p>{s[1]}</p>
-            <a class="link-btn" href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(s[0]+' '+s[3])}" target="_blank">Google Map</a></div>""", unsafe_allow_html=True)
-            if st.checkbox("旅程に採用", key=f"s_{i}"):
-                if s[0] not in st.session_state.selected_spots: st.session_state.selected_spots.append(s[0])
-    
-    c_m1, c_m2 = st.columns(2)
-    with c_m1:
-        if st.button("➕ More (さらに10個リサーチ)"):
-            prompt = f"{st.session_state.form_data['dest']}周辺の、まだ挙げていない観光スポットをさらに10件。形式：名称|詳細説明|予算目安|住所"
-            res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-            st.session_state.found_spots.extend([l.split('|') for l in res.choices[0].message.content.split('\n') if '|' in l][:10])
+    with st.form("input_form"):
+        c1, c2 = st.columns(2)
+        with c1: 
+            dep = st.text_input("🛫 出発地", "新宿駅")
+            dates = st.date_input("📅 日程", [datetime.now(), datetime.now() + timedelta(days=1)])
+        with c2:
+            pref = st.selectbox("📍 行き先(都道府県)", PREFECTURES)
+            city = st.text_input("詳細エリア", "箱根")
+        
+        submitted = st.form_submit_button("この条件でホテルとルートを検索")
+        if submitted:
+            st.session_state.start_date = dates[0]
+            st.session_state.dest = f"{pref}{city}"
+            st.session_state.step = "generate"
             st.rerun()
-    with c_m2:
-        if st.button("✅ プラン生成へ進む", type="primary"): st.session_state.step = "final_plan"; st.rerun()
 
-# --- STEP 3: タイムライン・ホテル・予算カード ---
-elif st.session_state.step == "final_plan":
-    if not st.session_state.final_plans:
-        with st.spinner("ホテル宿泊を含む全日程プランを作成中..."):
-            for label in ["Plan A", "Plan B", "Plan C", "Plan D", "Plan E"]:
-                prompt = f"{st.session_state.form_data['dest']} 2日間の旅程。宿泊施設(実在するホテル名)を必ず組み込め。形式：日付|時間|予定内容|予算目安"
-                res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
-                st.session_state.final_plans[label] = [l.split('|') for l in res.choices[0].message.content.split('\n') if '|' in l]
+elif st.session_state.step == "generate":
+    with st.spinner("ホテルを確保し、移動ルートを計算中..."):
+        # AIへの指示：移動手段、ホテル、日付を明確にする
+        prompt = f"""
+        {st.session_state.dest}への2日間の旅行プランを作成してください。
+        開始日：{st.session_state.start_date.strftime('%Y年%m月%d日')}
+        
+        【条件】
+        1. 1日目の夜に実在する「ホテル名」を必ず含め、そこを宿泊先として明記すること。
+        2. 移動は「新宿駅〜小田急線〜箱根湯本駅」のように、路線名や道順を具体的に書くこと。
+        3. 形式は必ず以下のパイプ区切りで出力すること。
+        日付|時間|種別(移動/スポット/ホテル)|内容|具体的な道順・詳細|予算
+        """
+        
+        res = client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": prompt}])
+        st.session_state.raw_plan = [l.split('|') for l in res.choices[0].message.content.split('\n') if '|' in l]
+        st.session_state.step = "display"
+        st.rerun()
 
-    chosen = st.radio("プラン選択", list(st.session_state.final_plans.keys()), horizontal=True)
+elif st.session_state.step == "display":
+    st.subheader(f"📍 {st.session_state.dest} 旅程表")
     
-    st.markdown('<div class="timeline-container">', unsafe_allow_html=True)
     current_day = ""
-    for item in st.session_state.final_plans[chosen]:
-        if len(item) >= 3:
-            if item[0] != current_day:
-                current_day = item[0]
-                st.markdown(f'<div class="day-label">{current_day}</div>', unsafe_allow_html=True)
+    for item in st.session_state.raw_plan:
+        if len(item) < 5: continue
+        day, time, category, title, detail, price = item[0], item[1], item[2], item[3], item[4], item[5]
+        
+        # 日付が変わったらヘッダーを表示
+        if day != current_day:
+            current_day = day
+            st.markdown(f'<div class="day-header">📅 {day}</div>', unsafe_allow_html=True)
+        
+        # 種別ごとにデザインを出し分け
+        if "移動" in category:
+            st.markdown(f'<div class="route-step"><b>{time}</b>：{title}<br><small>{detail}</small></div>', unsafe_allow_html=True)
+            
+        elif "ホテル" in category or "宿泊" in title:
             st.markdown(f"""
-            <div class="timeline-item"><div class="timeline-dot"></div>
-                <span class="time-badge">{item[1]}</span>
-                <div class="plan-card">
-                    <b>{item[2]}</b><br>
-                    <a class="link-btn" href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(item[2])}" target="_blank">目的地を見る</a>
-                </div>
+            <div class="hotel-card">
+                <span class="hotel-label">STAY / 宿泊</span>
+                <span class="price-tag">{price}</span>
+                <h3>🏨 {title}</h3>
+                <p>{detail}</p>
+                <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(title)}" class="map-link" target="_blank">📍 地図・空室状況を確認</a>
             </div>
             """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+            
+        else: # スポット
+            st.markdown(f"""
+            <div class="spot-card">
+                <span class="price-tag">{price}</span>
+                <b>{time}</b>
+                <h4>📍 {title}</h4>
+                <p>{detail}</p>
+                <a href="https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(title)}" class="map-link" target="_blank">Googleマップで道順を見る</a>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # 予算内訳
-    st.markdown("### 💰 予算概算")
-    st.markdown(f"""
-    <div class="budget-grid">
-        <div class="budget-card">🚆 交通費<span class="budget-val">¥12,000</span></div>
-        <div class="budget-card">🏨 宿泊費<span class="budget-val">¥18,000</span></div>
-        <div class="budget-card">🍖 食費<span class="budget-val">¥10,000</span></div>
-        <div class="budget-card">🎟️ その他<span class="budget-val">¥5,000</span></div>
-    </div>
-    <div style="text-align:right; font-size:1.8rem; font-weight:bold; color:#00695C; margin-top:20px;">合計 ¥45,000 / 人</div>
-    """, unsafe_allow_html=True)
-
-    # LINE共有
-    full_plan_text = f"【Aipia】旅程表 - {chosen}\n" + "\n".join([f"{x[0]} {x[1]} {x[2]}" for x in st.session_state.final_plans[chosen] if len(x)>2])
-    line_url = f"https://line.me/R/msg/text/?{urllib.parse.quote(full_plan_text)}"
-    st.markdown(f'<a href="{line_url}" target="_blank" class="line-footer">LINEでこのプランを共有する</a>', unsafe_allow_html=True)
-
-    if st.button("🏠 ホームに戻る"): st.session_state.clear(); st.session_state.step = "input"; st.rerun()
+    if st.button("条件を変えて作り直す"):
+        st.session_state.step = "input"
+        st.rerun()
