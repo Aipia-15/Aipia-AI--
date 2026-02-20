@@ -23,15 +23,15 @@ st.markdown("""
         font-weight: bold; 
         color: #111;
         margin-bottom: 0px;
-        line-height: 1;
+        line-height: 1.2;
     }
     .sub-title {
-        display: block; /* 改行を確実にする */
+        display: block;
         font-size: 18px;
         color: #555; 
         font-weight: bold;
         letter-spacing: 3px;
-        margin-top: 15px;
+        margin-top: 10px;
     }
     
     .plan-card {
@@ -45,7 +45,7 @@ st.markdown("""
 # 3. クライアント設定
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- ヘッダー（改行とデザインを修正） ---
+# --- ヘッダー ---
 st.markdown("""
     <div class="logo-container">
         <p class="aipia-logo">Aipia</p>
@@ -64,4 +64,41 @@ with col3:
     date_range = st.date_input(
         "📅 日程を選択",
         value=(datetime.now(), datetime.now()),
-        format="YYYY/MM
+        format="YYYY/MM/DD"
+    )
+with col4:
+    budget = st.text_input("💰 予算（1人あたり）", placeholder="例：5万円、100,000円")
+
+# 日数計算
+if isinstance(date_range, tuple) and len(date_range) == 2:
+    start_date, end_date = date_range
+    diff = (end_date - start_date).days + 1
+    stay_info = f"{start_date} から {end_date} までの {diff}日間"
+else:
+    stay_info = "日帰り"
+
+st.write("### 🏝 気になるテーマを選んでください")
+tags = st.multiselect(
+    "AIがプランに組み込みます",
+    ["温泉", "絶景", "郷土料理", "穴場", "アクティビティ", "歴史・文化", "インスタ映え", "のんびり"],
+    default=["絶景", "穴場"]
+)
+
+st.markdown("<br>", unsafe_allow_html=True)
+create_button = st.button("✨ 究極のスポットからプランを作成する", use_container_width=True, type="primary")
+
+# --- ロジック部分 ---
+if create_button:
+    if not destination:
+        st.error("目的地を入力してください！")
+    elif not budget:
+        st.error("予算を入力してください！")
+    else:
+        with st.spinner("AIが秘境プランを練っています..."):
+            prompt = f"""
+            以下の条件で最高の旅行プランを2つ提案してください。
+            【出発地】: {departure}
+            【目的地】: {destination}
+            【日程】: {stay_info}
+            【予算（正確な指定）】: {budget}
+            【重視するテーマ】: {', '.
