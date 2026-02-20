@@ -14,27 +14,28 @@ st.markdown("""
     <style>
     .stApp { background-color: #FCF9F2; }
     .black-banner {
-        background-color: #111; width: 100%; padding: 80px 0;
-        text-align: center; margin-bottom: 60px;
+        background-color: #111; width: 100%; padding: 60px 0;
+        text-align: center; margin-bottom: 40px;
     }
     .aipia-logo { 
         font-family: 'Georgia', serif; font-style: italic; 
-        font-size: 20vw; font-weight: bold; color: #FCF9F2; 
+        font-size: 15vw; font-weight: bold; color: #FCF9F2; 
         line-height: 1.0; margin: 0;
     }
     .sub-title { 
-        font-size: 3.5vw; color: #FCF9F2; font-weight: bold; 
-        letter-spacing: 1.2vw; margin-top: 40px; display: inline-block;
+        font-size: 3vw; color: #FCF9F2; font-weight: bold; 
+        letter-spacing: 1.2vw; margin-top: 30px; display: inline-block;
     }
     .spot-card {
-        background-color: white; padding: 30px; border-radius: 20px;
-        margin-bottom: 30px; border: 1px solid #eee; box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        background-color: white; padding: 25px; border-radius: 15px;
+        margin-bottom: 25px; border: 1px solid #eee; box-shadow: 0 5px 15px rgba(0,0,0,0.05);
     }
-    .spot-title { font-size: 28px; font-weight: bold; color: #111; margin-bottom: 10px; }
-    label { font-size: 15px !important; font-weight: bold !important; color: #444 !important; }
+    .spot-title { font-size: 24px; font-weight: bold; color: #111; margin-bottom: 8px; }
+    label { font-size: 14px !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
+# セッション管理
 if "step" not in st.session_state: st.session_state.step = "input"
 if "parsed_spots" not in st.session_state: st.session_state.parsed_spots = []
 if "final_plan_content" not in st.session_state: st.session_state.final_plan_content = ""
@@ -52,88 +53,102 @@ if st.session_state.step == "input":
     st.markdown("<h3 style='text-align:center;'>TRAVEL CONFIGURATION</h3>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
-    with col1: departure = st.text_input("🛫 出発地 (必須)", placeholder="例：東京、大阪駅...")
-    with col2: destination = st.text_input("📍 目的地", placeholder="例：長野、徳島...")
-    with col3: keyword = st.text_input("🔍 キーワード", placeholder="例：歴史、温泉...")
+    with col1: departure = st.text_input("🛫 出発地 (必須)", key="dep")
+    with col2: destination = st.text_input("📍 目的地", placeholder="長野、徳島など", key="dest")
+    with col3: keyword = st.text_input("🔍 キーワード", placeholder="秘境、温泉など", key="kw")
 
-    # 直列配置
-    col_date, col_p_adult, col_p_child, col_speed = st.columns([3, 1, 1, 2])
+    col_date, col_pa, col_pc, col_speed = st.columns([3, 1, 1, 2])
     with col_date:
-        date_range = st.date_input("📅 日程（開始日と終了日を2箇所クリック：必須）", 
+        date_range = st.date_input("📅 日程 (必須：開始と終了を選択)", 
                                   value=(datetime.now(), datetime.now() + timedelta(days=2)))
-    with col_p_adult:
-        adults = st.number_input("大人", 1, 20, 2)
-    with col_p_child:
-        kids = st.number_input("子供", 0, 20, 0)
-    with col_speed:
-        walking_speed = st.select_slider("🚶 歩行速度 (必須)", options=["ゆっくり", "標準", "せっかち"], value="標準")
+    with col_pa: adults = st.number_input("大人", 1, 20, 2)
+    with col_pc: kids = st.number_input("子供", 0, 20, 0)
+    with col_speed: walking_speed = st.select_slider("🚶 歩行速度", options=["ゆっくり", "標準", "せっかち"], value="標準")
 
-    tags = st.multiselect("🏝 旅のテーマ", ["絶景", "秘境", "歴史", "温泉", "美食"], default=["絶景", "秘境"])
-    budget = st.text_input("💰 予算/人 (必須)", placeholder="例：5万円、100,000円...")
+    budget = st.text_input("💰 予算/人 (必須)", placeholder="10万円など")
+    tags = st.multiselect("🏝 テーマ", ["絶景", "秘境", "歴史", "温泉", "美食"], default=["絶景", "秘境"])
 
-    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("✨ この条件で秘境を探索", use_container_width=True, type="primary"):
-        # --- 必須チェック ---
-        if not departure:
-            st.error("⚠️ 『出発地』を入力してください。")
-        elif not budget:
-            st.error("⚠️ 『予算』を入力してください。")
-        elif not (isinstance(date_range, tuple) and len(date_range) == 2):
-            st.error("⚠️ 日程は『開始日』と『終了日』の両方を選択してください。")
+        if not departure or not budget or not (isinstance(date_range, tuple) and len(date_range) == 2):
+            st.error("⚠️ 出発地、予算、日程（開始と終了）をすべて正しく入力してください。")
         else:
-            with st.spinner("極上の秘境をリサーチ中..."):
+            with st.spinner("スポット情報を生成中..."):
                 st.session_state.form_data = {
                     "departure": departure, "adults": adults, "kids": kids, 
                     "budget": budget, "speed": walking_speed, "dates": f"{date_range[0]}〜{date_range[1]}"
                 }
-                target = destination if destination else (keyword if keyword else "日本国内の秘境")
-                prompt = f"{target}周辺で、テーマ『{tags}』に合う具体的な観光スポットを10件。名称、解説(120文字程度)の順で。区切りは --- 。"
-                
+                # AIに厳格なルールで出力させる
+                target = destination if destination else keyword
+                prompt = f"""{target}周辺の観光スポットを8つ提案してください。
+                以下の形式を厳守し、各スポットを '===' で区切ってください。
+                名称: (スポット名)
+                解説: (100文字程度の解説)
+                ===
+                """
                 res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
-                st.session_state.parsed_spots = [s.strip() for s in res.choices[0].message.content.split("---") if "名称" in s]
-                st.session_state.step = "select_spots"
-                st.rerun()
+                
+                # 生のテキストを保存
+                raw_content = res.choices[0].message.content
+                # 念のため名称が含まれている行を分割してリスト化
+                spots = [s.strip() for s in raw_content.split("===") if "名称" in s]
+                
+                if spots:
+                    st.session_state.parsed_spots = spots
+                    st.session_state.step = "select_spots"
+                    st.rerun()
+                else:
+                    st.error("AIからの回答が読み取れませんでした。もう一度お試しください。")
 
-# --- STEP 2: スポット選択 ---
+# --- STEP 2: スポット選択 (ここが肝) ---
 elif st.session_state.step == "select_spots":
     st.markdown("<h2 style='text-align:center;'>SPOT DISCOVERY</h2>", unsafe_allow_html=True)
     selected_names = []
     
+    # 確実に1件ずつカードとして表示する
     for i, spot_text in enumerate(st.session_state.parsed_spots):
-        name_match = re.search(r"名称[:：]\s*(.*)", spot_text)
-        desc_match = re.search(r"解説[:：]\s*(.*)", spot_text)
-        name = name_match.group(1) if name_match else f"スポット {i+1}"
-        desc = desc_match.group(1) if desc_match else spot_text[:100]
+        # 名前と解説を抽出
+        name = "不明なスポット"
+        desc = spot_text
+        
+        name_search = re.search(r"名称[:：]\s*(.*)", spot_text)
+        if name_search: name = name_search.group(1).strip()
+        
+        desc_search = re.search(r"解説[:：]\s*(.*)", spot_text)
+        if desc_search: desc = desc_search.group(1).strip()
 
         st.markdown(f'<div class="spot-card">', unsafe_allow_html=True)
-        col_img, col_txt = st.columns([1, 2])
-        with col_img:
-            # 写真を復活 (Picsumを活用してスポットごとにユニークな画像を表示)
-            st.image(f"https://picsum.photos/seed/aipia_{i}_{name}/800/600", use_container_width=True)
-        with col_txt:
+        c_img, c_txt = st.columns([1, 2])
+        with c_img:
+            # プレースホルダー画像（写真復活）
+            st.image(f"https://picsum.photos/seed/{i}_{name}/400/300", use_container_width=True)
+        with c_txt:
             st.markdown(f'<p class="spot-title">{name}</p>', unsafe_allow_html=True)
             st.write(desc)
-            if st.checkbox(f"この場所をプランに入れる ⭐", key=f"sel_{i}"):
+            if st.checkbox(f"この場所を選択 ⭐", key=f"sel_{i}"):
                 selected_names.append(name)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.button("🚀 最終プランを生成する", use_container_width=True, type="primary"):
-        if selected_names:
-            st.session_state.selected_names = selected_names
-            st.session_state.step = "final_plan"
-            st.rerun()
-        else:
-            st.error("⚠️ 最低1つはスポットを選んでください。")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🚀 プランを生成", use_container_width=True, type="primary"):
+            if selected_names:
+                st.session_state.selected_names = selected_names
+                st.session_state.step = "final_plan"
+                st.rerun()
+            else:
+                st.error("スポットを1つ以上選んでください。")
+    with col_btn2:
+        if st.button("← 戻る"): st.session_state.step = "input"; st.rerun()
 
 # --- STEP 3: 最終プラン ---
 elif st.session_state.step == "final_plan":
     if not st.session_state.final_plan_content:
         f = st.session_state.form_data
-        with st.spinner("AIコンシェルジュが執筆中..."):
-            prompt = f"出発地:{f['departure']}、日程:{f['dates']}、予算:{f['budget']}、大人{f['adults']}名、子供{f['kids']}名、歩行:{f['speed']}。選んだスポット:{st.session_state.selected_names}。これらを巡る詳細な旅行プランを5つ提案して。"
+        with st.spinner("AIが旅程を執筆中..."):
+            prompt = f"{f['dates']}、{f['departure']}発、予算{f['budget']}。大人{f['adults']}名、子供{f['kids']}名、歩行速度:{f['speed']}。選んだ場所:{st.session_state.selected_names}。これらを使った5つの詳細な旅行プランを提案して。"
             res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
             st.session_state.final_plan_content = res.choices[0].message.content
 
-    st.markdown(f'<div style="background:white; padding:50px; border-radius:30px; line-height:2;">{st.session_state.final_plan_content}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background:white; padding:40px; border-radius:20px;">{st.session_state.final_plan_content}</div>', unsafe_allow_html=True)
     if st.button("← 戻る"): 
         st.session_state.step = "input"; st.session_state.final_plan_content = ""; st.rerun()
