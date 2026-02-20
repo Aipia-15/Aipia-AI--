@@ -26,10 +26,9 @@ st.markdown("""
         font-size: 1000px; 
         font-weight: bold; color: #111; 
         line-height: 0.9; 
-        letter-spacing: 5px; 
+        letter-spacing: 10px; 
         margin: 0;
         position: relative;
-        z-index: 10; /* 棒より上へ */
     }
     
     /* サブタイトル：大きく、かつ棒のデザインを統合 */
@@ -40,8 +39,8 @@ st.markdown("""
         margin-top: 25px;
         padding: 25px 0;
         display: inline-block;
-        border-top: 10px solid #111; /* 黒い棒をより太く、文字との距離を確保 */
-        border-bottom: 10px solid #111;
+        border-top: 2px solid #111; /* 黒い棒をより太く、文字との距離を確保 */
+        border-bottom: 2px solid #111;
         line-height: 1.1;
         position: relative;
         z-index: 5;
