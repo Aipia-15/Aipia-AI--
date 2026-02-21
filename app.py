@@ -24,62 +24,46 @@ def parse_json_safely(text):
     try:
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match: return None
-        json_str = match.group().replace("'", '"')
-        return json.loads(json_str)
-    except:
-        return None
+        return json.loads(match.group().replace("'", '"'))
+    except: return None
 
-# --- 2. スタイル定義 ---
+# --- 2. スタイル ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Playfair+Display:wght@700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap');
     .stApp { background-color: #F8F6F4; color: #1A1A1A; font-family: 'Noto Serif JP', serif; }
-    .header-container { text-align: center; padding: 40px 0; border-bottom: 2px solid #D4AF37; background: #FFF; margin-bottom: 30px; }
-    .aipia-logo { font-family: 'Playfair Display', serif; font-size: 3.5rem; color: #111; letter-spacing: 5px; margin: 0; }
-    .aipia-sub { color: #D4AF37; font-weight: bold; letter-spacing: 2px; font-size: 1rem; margin-top: -5px; }
-    .spot-card { margin-bottom: 20px; padding: 20px; background: #FFF; border-radius: 12px; border-left: 6px solid #D4AF37; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-    .day-box { background: linear-gradient(90deg, #E8F5E9, #FFF); padding: 12px 25px; border-radius: 8px; font-weight: bold; margin: 30px 0 10px 0; color: #2E7D32; border-left: 5px solid #2E7D32; }
-    .time-step { background-color: #E3F2FD; padding: 20px; border-radius: 10px; margin: 10px 0; border: 1px solid #BBDEFB; position: relative; }
-    .aipia-badge { position: absolute; top: -10px; right: -10px; background: #FFD700; color: #000; padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; border: 2px solid #FFF; }
-    .advice-container { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
-    .advice-card { flex: 1; min-width: 250px; background-color: #FFF3E0; border-left: 5px solid #FF9800; padding: 15px; border-radius: 5px; font-size: 0.9rem; }
-    .reserve-btn { display: inline-block; padding: 10px 20px; margin: 5px; border-radius: 5px; color: white !important; text-decoration: none !important; font-weight: bold; }
+    .header-container { text-align: center; padding: 30px 0; border-bottom: 2px solid #D4AF37; background: #FFF; margin-bottom: 20px; }
+    .spot-card { margin-bottom: 15px; padding: 15px; background: #FFF; border-radius: 10px; border-left: 6px solid #D4AF37; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .route-info { background-color: #ECEFF1; border-radius: 8px; padding: 15px; margin: 10px 0; border-left: 5px solid #607D8B; font-size: 0.9rem; }
+    .time-step { background-color: #E3F2FD; padding: 15px; border-radius: 10px; margin: 10px 0; border: 1px solid #BBDEFB; }
+    .advice-card { background-color: #FFF3E0; border-left: 5px solid #FF9800; padding: 12px; border-radius: 5px; font-size: 0.85rem; flex: 1; min-width: 200px; }
+    .reserve-btn { display: inline-block; padding: 10px 15px; margin: 5px; border-radius: 5px; color: white !important; text-decoration: none; font-weight: bold; font-size: 0.8rem; }
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="header-container"><p class="aipia-logo">Aipia</p><p class="aipia-sub">-AIが創る、秘境への旅行プラン-</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="header-container"><h1>Aipia</h1><p>-AIが算出する、出発地からの完全ルート-</p></div>', unsafe_allow_html=True)
 
+# セッション
 if "step" not in st.session_state: st.session_state.step = "input"
 if "found_spots" not in st.session_state: st.session_state.found_spots = []
 if "selected_spots" not in st.session_state: st.session_state.selected_spots = []
 if "plans" not in st.session_state: st.session_state.plans = []
+if "page_offset" not in st.session_state: st.session_state.page_offset = 0
 
 # --- STEP 1: 入力 ---
 if st.session_state.step == "input":
     col_k1, col_k2 = st.columns([3, 1])
-    with col_k1: keyword = st.text_input("🔍 キーワード検索")
-    with col_k2: transport = st.radio("🚃 交通手段", ["電車・公共交通", "車・レンタカー"], horizontal=True)
-    walk_speed = st.select_slider("🚶‍♂️ 歩く速度", options=["ゆっくり", "普通", "早歩き"], value="普通")
+    with col_k1: keyword = st.text_input("🔍 探したいスポット・体験", placeholder="例：秘境の温泉、車で行ける絶景、歴史ある街並み")
+    with col_k2: transport = st.radio("🚃 移動手段", ["公共交通機関", "車・レンタカー"], horizontal=True)
     
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1: dep_place = st.text_input("🛫 出発地点", value="新宿駅")
-    with col2: date_range = st.date_input("📅 旅行日程", value=(datetime.now(), datetime.now() + timedelta(days=1)))
-    with col3: dep_time = st.time_input("🕔 出発時刻", value=datetime.strptime("08:00", "%H:%M").time())
+    col1, col2 = st.columns(2)
+    with col1: dep_place = st.text_input("🛫 出発地（駅名や住所）", value="新宿駅")
+    with col2: dest_area = st.text_input("📍 目的地エリア（都道府県・市）", value="長野県")
     
-    col4, col5, col6 = st.columns([2, 2, 2])
-    with col4: pref = st.selectbox("📍 都道府県", PREFECTURES)
-    with col5: city = st.text_input("🏠 市区町村")
-    with col6: budget = st.number_input("💰 予算/人", 5000, 500000, 50000)
-    
-    col_pur, col_people = st.columns([3, 2])
-    with col_pur: purposes = st.multiselect("✨ 目的", ["秘境探索", "美食", "温泉", "歴史", "絶景", "バリアフリー重視"], default=["秘境探索"])
-    with col_people:
-        a_count = st.number_input("大人", 1, 10, 2)
-        k_count = st.number_input("小人", 0, 10, 0)
-
-    if st.button("⚜️ 秘境リサーチを開始する", use_container_width=True, type="primary"):
-        st.session_state.form_data = {"dep": dep_place, "dest": f"{pref}{city}", "transport": transport, "speed": walk_speed, "people": f"大人{a_count}名,小人{k_count}名", "purposes": purposes}
-        prompt = f"{pref}{city}周辺の{keyword}スポットを10件。必ず公式URLや情報サイトのURLを含めて。形式：名称|解説|住所|URL|ジャンル"
+    if st.button("⚜️ ルートとスポットをリサーチ", use_container_width=True, type="primary"):
+        st.session_state.form_data = {"dep": dep_place, "dest": dest_area, "transport": transport}
+        # 重複を避けるためページオフセットを使用
+        prompt = f"{dest_area}の{keyword}に関連する「実在する」観光施設を10件。名称|解説|住所|URL 形式。架空の名前は厳禁。"
         res = call_groq_safe(prompt)
         if res:
             st.session_state.found_spots = [l.split('|') for l in res.strip().split('\n') if '|' in l]
@@ -87,106 +71,89 @@ if st.session_state.step == "input":
 
 # --- STEP 2: スポット選択 ---
 elif st.session_state.step == "select_spots":
-    st.markdown(f"### 📍 {st.session_state.form_data['dest']} 候補スポット")
+    st.subheader(f"📍 {st.session_state.form_data['dest']} の候補")
     for i, s in enumerate(st.session_state.found_spots):
         if len(s) < 2: continue
-        url_link = f'<br><a href="{s[3]}" target="_blank">🌐 公式・関連サイトを見る</a>' if len(s)>3 and "http" in s[3] else ""
-        st.markdown(f'<div class="spot-card"><h4>{s[0]}</h4><p>{s[1]}{url_link}</p></div>', unsafe_allow_html=True)
-        if st.checkbox("このスポットを採用", key=f"s_{i}"):
+        st.markdown(f'<div class="spot-card"><b>{s[0]}</b><br><small>{s[1]}</small></div>', unsafe_allow_html=True)
+        if st.checkbox("採用", key=f"s_{i}"):
             if s[0] not in st.session_state.selected_spots: st.session_state.selected_spots.append(s[0])
     
     col_more, col_next = st.columns(2)
     with col_more:
-        if st.button("➕ スポットをもっと見る"):
-            res = call_groq_safe(f"{st.session_state.form_data['dest']}の未紹介の秘境をさらに10件。名称|解説|住所|URL|ジャンル")
-            if res: st.session_state.found_spots.extend([l.split('|') for l in res.strip().split('\n') if '|' in l]); st.rerun()
+        if st.button("➕ 他のスポットをもっと見る"):
+            st.session_state.page_offset += 1
+            res = call_groq_safe(f"{st.session_state.form_data['dest']}で、まだ出していないスポットをさらに10件。名称|解説|住所|URL 形式。")
+            if res:
+                new_items = [l.split('|') for l in res.strip().split('\n') if '|' in l]
+                st.session_state.found_spots.extend(new_items)
+                st.rerun()
     with col_next:
-        if st.button("✅ ホテル・プラン生成へ", type="primary"): st.session_state.step = "hotel_survey"; st.rerun()
+        if st.button("✅ ルート・ホテル生成へ", type="primary"): st.session_state.step = "hotel_survey"; st.rerun()
 
-# --- STEP 3: ホテル希望 ---
+# --- STEP 3: 希望 ---
 elif st.session_state.step == "hotel_survey":
-    st.markdown("### 🏨 宿泊とバリアフリーの希望")
-    h_style = st.selectbox("宿泊スタイル", ["絶景の宿", "老舗旅館", "バリアフリー完備の宿", "モダンラグジュアリー"])
-    h_barrier = st.multiselect("必要な配慮", ["車椅子対応", "段差なし", "貸切風呂", "エレベーター至近"])
-    if st.button("✨ 5つの詳細プランを生成", type="primary"):
-        st.session_state.hotel_data = {"style": h_style, "barrier": h_barrier}
+    st.subheader("🏨 宿泊とバリアフリーの確認")
+    h_type = st.selectbox("ホテルの種類", ["絶景旅館", "バリアフリー対応ホテル", "駅近モダンホテル"])
+    barrier = st.multiselect("配慮事項", ["段差なし", "車椅子トイレ", "手すり", "エレベーター"])
+    if st.button("✨ 全日程の完全ルートを生成", type="primary"):
+        st.session_state.hotel_data = {"type": h_type, "barrier": barrier}
         st.session_state.step = "plan_gen"; st.rerun()
 
-# --- STEP 4: プラン表示 (全日程・チェックイン・編集) ---
+# --- STEP 4: プラン表示 (ルート算出) ---
 elif st.session_state.step == "plan_gen":
     if not st.session_state.plans:
-        with st.spinner("実在する宿泊施設とチェックイン時間を調査中..."):
-            for i in range(5):
+        with st.spinner("出発地からの経路を計算中..."):
+            for i in range(3):
                 prompt = f"""
-                旅行者:{st.session_state.form_data['people']}, 目的:{st.session_state.form_data['purposes']}
-                出発:{st.session_state.form_data['dep']}, スポット:{st.session_state.selected_spots}, 宿泊:{st.session_state.hotel_data['style']}
+                出発地:{st.session_state.form_data['dep']}, 目的地:{st.session_state.form_data['dest']}, 交通:{st.session_state.form_data['transport']}
+                スポット:{st.session_state.selected_spots}, 宿泊:{st.session_state.hotel_data['type']}
                 
-                【厳守】
-                1. 1日目と2日目、全日程を網羅すること。
-                2. 実在するホテル名を 'hotel_name' に入れる。
-                3. 1日目の宿泊行程には、必ず「15:00 チェックイン」のように時間を明記すること。
-                4. Aipia独自の専門アドバイスを3個、'advices'配列に入れること。
-                5. スポットごとに情報URLを 'url' キーで含めること（不明ならGoogle検索URL）。
+                【必須要件】
+                1. 冒頭に 'route_summary' として、出発地から目的地までの具体的経路（例：特急あずさで約3時間等）を明記。
+                2. 実在するホテル名を 'hotel_name' に入れる。「塩嶺王寺」のような架空名は厳禁。
+                3. 1日目・2日目の全行程を作成。チェックイン時間は必ず15:00-18:00の間で設定。
+                4. アドバイス3個を 'advices' 配列に。
                 
-                {{'advices': ['...', '...', '...'], 'hotel_name': '具体的施設名', 'days': [{{'label': '1日目', 'steps': [{{'arrival': '15:00', 'departure': '翌09:00', 'content': '...', 'url': '...', 'is_recommended': false}}]}}]}}
+                {{'route_summary': '...', 'advices': ['...', '...', '...'], 'hotel_name': '実在ホテル', 'days': [{{'label': '1日目', 'steps': [{{'arrival': '10:00', 'departure': '11:00', 'content': '...'}}]}}]}}
                 """
                 res = call_groq_safe(prompt)
                 parsed = parse_json_safely(res)
                 if parsed: st.session_state.plans.append(parsed)
 
     if st.session_state.plans:
-        plan_idx = st.sidebar.selectbox("プランを比較", [f"プラン {i+1}" for i in range(len(st.session_state.plans))])
-        current_data = st.session_state.plans[int(plan_idx[-1])-1]
-
-        # アドバイス
-        advs = current_data.get("advices", ["計画的な移動を。", "地元の味を大切に。", "景色を楽しみましょう。"])
-        st.markdown('<div class="advice-container">' + "".join([f'<div class="advice-card">💡 {a}</div>' for a in advs[:3]]) + '</div>', unsafe_allow_html=True)
+        p_idx = st.sidebar.radio("プラン選択", range(len(st.session_state.plans)), format_func=lambda x: f"案 {x+1}")
+        data = st.session_state.plans[p_idx]
         
-        st.info(f"🏨 **提案ホテル:** {current_data.get('hotel_name')}")
+        st.markdown(f'<div class="route-info">🚀 <b>アクセス経路:</b> {data.get("route_summary")}</div>', unsafe_allow_html=True)
+        
+        col_adv = st.columns(3)
+        for idx, a in enumerate(data.get("advices", [])[:3]):
+            col_adv[idx].markdown(f'<div class="advice-card">💡 {a}</div>', unsafe_allow_html=True)
+            
+        st.info(f"🏨 提案ホテル: {data.get('hotel_name')}")
+        
+        if st.toggle("🛠️ 行程を編集する"):
+            for d in data.get("days", []):
+                for stp in d.get("steps", []):
+                    stp['content'] = st.text_area(f"{stp['arrival']}の内容", stp['content'])
 
-        if st.toggle("🛠️ プランを編集する"):
-            for d_idx, day in enumerate(current_data.get("days", [])):
-                for s_idx, step in enumerate(day.get("steps", [])):
-                    c1, c2, c3 = st.columns([1, 1, 3])
-                    step['arrival'] = c1.text_input(f"着 {d_idx}-{s_idx}", step.get('arrival'))
-                    step['departure'] = c2.text_input(f"出 {d_idx}-{s_idx}", step.get('departure'))
-                    step['content'] = c3.text_area(f"内容 {d_idx}-{s_idx}", step.get('content'))
-
-        for day in current_data.get("days", []):
-            st.markdown(f'<div class="day-box">{day.get("label")}</div>', unsafe_allow_html=True)
+        for day in data.get("days", []):
+            st.markdown(f"#### 📅 {day['label']}")
             for step in day.get("steps", []):
-                rec = '<div class="aipia-badge">Aipia厳選！</div>' if step.get('is_recommended') else ''
-                url_btn = f'<br><a href="{step.get("url", "#")}" target="_blank" style="font-size:0.8rem; color:#1976D2;">🔗 詳細情報を見る</a>'
-                st.markdown(f'<div class="time-step">{rec}<b>{step.get("arrival")}着 / {step.get("departure")}発</b><br>{step.get("content")}{url_btn}</div>', unsafe_allow_html=True)
-        
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
-            if st.button("🔄 案を再生成"): st.session_state.plans = []; st.rerun()
-        with col_b2:
-            if st.button("🏆 最終確定・予約", type="primary"): 
-                st.session_state.confirmed_plan = current_data
-                st.session_state.step = "share"; st.rerun()
+                st.markdown(f'<div class="time-step"><b>{step["arrival"]} - {step["departure"]}</b><br>{step["content"]}</div>', unsafe_allow_html=True)
+
+        if st.button("🏆 この内容で予約へ", type="primary"):
+            st.session_state.confirmed = data; st.session_state.step = "share"; st.rerun()
 
 elif st.session_state.step == "share":
-    plan = st.session_state.confirmed_plan
-    h_name = plan.get("hotel_name", "宿泊施設")
-    q_h = urllib.parse.quote(h_name)
-    
-    st.success(f"🎉 完璧な旅程が完成しました。")
-    st.markdown(f"### 🏨 宿泊予約：{h_name}")
-    
-    # 大手サイトへのクイックアクセスボタン
+    plan = st.session_state.confirmed
+    h_name = plan.get("hotel_name")
+    q = urllib.parse.quote(h_name)
+    st.success(f"旅程が確定しました。")
+    st.markdown(f"### 🏨 {h_name} の予約はこちら")
     st.markdown(f"""
-        <div style="margin-bottom:20px;">
-            <a href="https://hb.afl.rakuten.co.jp/hgc/share/search?pc=https%3A%2F%2Fsearch.rakuten.co.jp%2Fsearch%2Fmall%2F{q_h}%2F" target="_blank" class="reserve-btn" style="background:#bf0000;">楽天トラベルで予約</a>
-            <a href="https://www.jalan.net/keyword/{q_h}/" target="_blank" class="reserve-btn" style="background:#ff7a00;">じゃらんで予約</a>
-            <a href="https://www.ikyu.com/search/?keyword={q_h}" target="_blank" class="reserve-btn" style="background:#003567;">一休.comで予約</a>
-        </div>
+        <a href="https://search.rakuten.co.jp/search/mall/{q}/" target="_blank" class="reserve-btn" style="background:#bf0000;">楽天トラベル</a>
+        <a href="https://www.jalan.net/keyword/{q}/" target="_blank" class="reserve-btn" style="background:#ff7a00;">じゃらん</a>
+        <a href="https://www.ikyu.com/search/?keyword={q}" target="_blank" class="reserve-btn" style="background:#003567;">一休.com</a>
     """, unsafe_allow_html=True)
-
-    for day in plan.get("days", []):
-        st.subheader(day.get("label"))
-        for step in day.get("steps", []):
-            st.info(f"🕒 {step.get('arrival')} - {step.get('departure')}\n\n{step.get('content')}")
-    
-    if st.button("🏠 ホームへ戻る"): st.session_state.clear(); st.rerun()
+    st.button("最初から作成", on_click=lambda: st.session_state.clear())
